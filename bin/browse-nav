@@ -2,10 +2,13 @@
 import { connect, activeOrFirstPage, parseArgs } from "../lib/connect.js";
 
 const args = parseArgs(process.argv.slice(2), { new: "bool", wait: "bool" });
-const url = args._[0];
+let url = args._[0];
 if (!url) {
   console.error("Usage: browse-nav <url> [--new] [--wait]");
   process.exit(1);
+}
+if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) {
+  url = `https://${url}`;
 }
 
 const browser = await connect();

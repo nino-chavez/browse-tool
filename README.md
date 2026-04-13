@@ -29,14 +29,21 @@ Then `/add-dir /Users/nino/Workspace/dev/tools/browse-tool` in Claude Code so th
 
 All commands connect to a single long-lived Chrome started by `browse-start`. State lives in `$TMPDIR/browse-tool-state.json`.
 
-### `browse-start [--profile] [--headless] [--port 9222]`
-Launch Chrome with remote debugging. `--profile` rsyncs your macOS default Chrome profile into a temp dir so cookies/logins carry over (safe — your real profile is untouched).
+### `browse-start [--profile] [--profile-name <name>] [--reseed] [--headless] [--port 9222]`
+Launch Chrome with remote debugging. Profiles live persistently under `~/.browse-tool/profiles/<name>` so your logged-in state survives between sessions.
+
+- **Default profile name** is the basename of the current working directory — launching from `~/Workspace/dev/apps/rally-hq` auto-selects `~/.browse-tool/profiles/rally-hq`. Override with `--profile-name foo`.
+- **`--profile`** on first run rsyncs your real Chrome default profile (cookies, logins, extensions) into the target directory — **only when the target is empty**. Your real Chrome profile is never modified. On subsequent runs the flag is a no-op; the persistent profile is reused as-is.
+- **`--reseed`** forces a fresh rsync over an existing profile (useful after you log into a new account in real Chrome).
+- **`--headless`** runs without a visible window.
+
+Parallel with real Chrome on macOS: browse-tool Chrome runs as its own process but macOS merges it with your real Chrome in the Dock (same app bundle). Use `Cmd+~` to cycle between their windows, or install Chromium / Chrome Canary and set `CHROME_PATH=/path/to/Chromium.app/Contents/MacOS/Chromium` for a truly separate Dock app.
 
 ### `browse-stop`
 Kill the managed Chrome and clear state.
 
 ### `browse-nav <url> [--new] [--wait]`
-Navigate the active tab (or a new one with `--new`). `--wait` waits for `networkidle2` instead of `domcontentloaded`. Prints final URL and title.
+Navigate the active tab (or a new one with `--new`). `https://` is auto-prepended if the URL has no scheme. `--wait` waits for `networkidle2` instead of `domcontentloaded`. Prints final URL and title.
 
 ### `browse-eval '<js>'` | `browse-eval --file script.js` | `echo '…' | browse-eval --stdin`
 Run JavaScript in the active page. Code is wrapped in `async () => { … }`, so use `return` for a value and `await` freely. Result is JSON-serialized to stdout. Prefer writing scripts to files for anything non-trivial.

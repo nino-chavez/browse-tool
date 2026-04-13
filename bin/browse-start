@@ -1,13 +1,20 @@
 #!/usr/bin/env node
 import { spawn, execSync } from "node:child_process";
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
-import { tmpdir, platform, homedir } from "node:os";
-import { join } from "node:path";
+import { mkdirSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { platform, homedir } from "node:os";
+import { join, basename } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { DEFAULT_PORT, STATE_FILE, parseArgs, readState } from "../lib/connect.js";
 
-const args = parseArgs(process.argv.slice(2), { profile: "bool", headless: "bool" });
+const args = parseArgs(process.argv.slice(2), {
+  profile: "bool",
+  headless: "bool",
+  reseed: "bool",
+});
 const port = Number(args.port ?? DEFAULT_PORT);
+const profileName =
+  args["profile-name"] ??
+  (basename(process.cwd()).replace(/[^a-z0-9._-]/gi, "-") || "default");
 
 const existing = readState();
 if (existing?.pid) {
@@ -39,12 +46,28 @@ function findChrome() {
 }
 
 const chrome = process.env.CHROME_PATH || findChrome();
-const userDataDir = join(tmpdir(), `browse-tool-profile-${port}`);
+const profilesRoot = join(homedir(), ".browse-tool", "profiles");
+const userDataDir = join(profilesRoot, profileName);
 mkdirSync(userDataDir, { recursive: true });
 
-if (args.profile && platform() === "darwin") {
+const profileIsEmpty = () => {
+  try {
+    return readdirSync(userDataDir).filter((f) => f !== ".DS_Store").length === 0;
+  } catch {
+    return true;
+  }
+};
+
+const shouldSeed = args.profile && (profileIsEmpty() || args.reseed);
+if (args.profile && !shouldSeed) {
+  console.log(
+    `Using existing profile at ${userDataDir} (pass --reseed to overwrite from real Chrome).`,
+  );
+}
+if (shouldSeed && platform() === "darwin") {
   const src = join(homedir(), "Library/Application Support/Google/Chrome/Default");
   if (existsSync(src)) {
+    console.log(`Seeding profile '${profileName}' from ${src} ...`);
     try {
       execSync(
         `rsync -a --delete --exclude 'Cache' --exclude 'Code Cache' --exclude 'GPUCache' "${src}/" "${join(userDataDir, "Default")}/"`,
@@ -79,10 +102,15 @@ for (let i = 0; i < 40; i++) {
       const info = await res.json();
       writeFileSync(
         STATE_FILE,
-        JSON.stringify({ pid: child.pid, port, userDataDir, started: Date.now() }, null, 2),
+        JSON.stringify(
+          { pid: child.pid, port, userDataDir, profileName, started: Date.now() },
+          null,
+          2,
+        ),
       );
       console.log(`Chrome started on port ${port} (pid ${child.pid}).`);
       console.log(`  Browser: ${info.Browser}`);
+      console.log(`  Profile: ${userDataDir}`);
       console.log(`  State:   ${STATE_FILE}`);
       process.exit(0);
     }
