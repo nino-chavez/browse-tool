@@ -1,0 +1,22 @@
+{
+  "name": "browse-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal Bash-invokable browser tools for coding agents. Replaces Chrome DevTools/Playwright MCP.",
+  "bin": {
+    "browse-start": "./bin/browse-start.js",
+    "browse-stop": "./bin/browse-stop.js",
+    "browse-nav": "./bin/browse-nav.js",
+    "browse-eval": "./bin/browse-eval.js",
+    "browse-screenshot": "./bin/browse-screenshot.js",
+    "browse-pick": "./bin/browse-pick.js",
+    "browse-tabs": "./bin/browse-tabs.js"
+  },
+  "dependencies": {
+    "puppeteer-core": "^23.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

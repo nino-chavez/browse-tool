@@ -1,0 +1,93 @@
+#!/usr/bin/env node
+import { spawn, execSync } from "node:child_process";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { tmpdir, platform, homedir } from "node:os";
+import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
+import { DEFAULT_PORT, STATE_FILE, parseArgs, readState } from "../lib/connect.js";
+
+const args = parseArgs(process.argv.slice(2), { profile: "bool", headless: "bool" });
+const port = Number(args.port ?? DEFAULT_PORT);
+
+const existing = readState();
+if (existing?.pid) {
+  try {
+    process.kill(existing.pid, 0);
+    console.log(`Chrome already running (pid ${existing.pid}, port ${existing.port}).`);
+    process.exit(0);
+  } catch {}
+}
+
+function findChrome() {
+  if (platform() === "darwin") {
+    const paths = [
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    ];
+    for (const p of paths) if (existsSync(p)) return p;
+  }
+  if (platform() === "linux") {
+    for (const cmd of ["google-chrome", "chromium", "chromium-browser"]) {
+      try {
+        return execSync(`which ${cmd}`, { stdio: ["ignore", "pipe", "ignore"] })
+          .toString()
+          .trim();
+      } catch {}
+    }
+  }
+  throw new Error("Chrome/Chromium not found. Install it or set CHROME_PATH.");
+}
+
+const chrome = process.env.CHROME_PATH || findChrome();
+const userDataDir = join(tmpdir(), `browse-tool-profile-${port}`);
+mkdirSync(userDataDir, { recursive: true });
+
+if (args.profile && platform() === "darwin") {
+  const src = join(homedir(), "Library/Application Support/Google/Chrome/Default");
+  if (existsSync(src)) {
+    try {
+      execSync(
+        `rsync -a --delete --exclude 'Cache' --exclude 'Code Cache' --exclude 'GPUCache' "${src}/" "${join(userDataDir, "Default")}/"`,
+        { stdio: "inherit" },
+      );
+    } catch (e) {
+      console.error("Profile sync failed:", e.message);
+    }
+  }
+}
+
+const chromeArgs = [
+  `--remote-debugging-port=${port}`,
+  `--user-data-dir=${userDataDir}`,
+  "--no-first-run",
+  "--no-default-browser-check",
+  "--disable-features=ChromeWhatsNewUI",
+];
+if (args.headless) chromeArgs.push("--headless=new");
+
+const child = spawn(chrome, chromeArgs, {
+  detached: true,
+  stdio: "ignore",
+});
+child.unref();
+
+for (let i = 0; i < 40; i++) {
+  await sleep(150);
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/json/version`);
+    if (res.ok) {
+      const info = await res.json();
+      writeFileSync(
+        STATE_FILE,
+        JSON.stringify({ pid: child.pid, port, userDataDir, started: Date.now() }, null, 2),
+      );
+      console.log(`Chrome started on port ${port} (pid ${child.pid}).`);
+      console.log(`  Browser: ${info.Browser}`);
+      console.log(`  State:   ${STATE_FILE}`);
+      process.exit(0);
+    }
+  } catch {}
+}
+
+console.error("Chrome did not become ready on port", port);
+process.exit(1);
