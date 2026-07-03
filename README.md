@@ -58,6 +58,9 @@ browse-eval 'const r = await fetch("/api/me"); return r.status'
 ### `browse-screenshot [--full] [--out path.png]`
 Capture the viewport (or full page with `--full`) as PNG. Prints the path so you can `Read` it.
 
+### `browse-shot <url> [--out path.png] [--full] [--wait] [--wait-ms <n>] [--wait-for <selector>]`
+Navigate to URL, wait for readiness, optionally wait for a selector or additional time, then screenshot in one command. Replaces the `browse-nav && sleep N && browse-screenshot` pattern. Prints the output path.
+
 ### `browse-tabs [list | close <index>]`
 List open tabs with their URL/title, or close a tab by index.
 
