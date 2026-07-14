@@ -95,6 +95,8 @@ browse-eval 'return document.querySelectorAll("[data-testid]").length'
 browse-pick  # human clicks the element in Chrome
 ```
 
+**Bigger, project-specific scripts:** `examples/` holds standalone scripts built on `lib/connect.js` directly (bypassing the `bin/` commands) for cases too specific to generalize — e.g. `examples/rally-audit.mjs`, a one-pass route auditor for a particular project's dev server (hardcoded routes/slugs/viewport). Not installed on PATH; run with `node examples/<script>.mjs` after `browse-start`.
+
 **Read an article as clean markdown:**
 ```bash
 browse-start
