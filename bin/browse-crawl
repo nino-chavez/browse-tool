@@ -1,0 +1,91 @@
+#!/usr/bin/env node
+import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { connect, activeOrFirstPage, parseArgs } from "../lib/connect.js";
+import { htmlToMarkdown, sameOriginLinks } from "../lib/extract.js";
+
+const args = parseArgs(process.argv.slice(2), { wait: "bool" });
+let startUrl = args._[0];
+
+if (!startUrl) {
+  console.error(
+    "Usage: browse-crawl <start-url> [--depth N] [--include prefix] [--max N] [--out dir]",
+  );
+  process.exit(1);
+}
+if (!/^[a-z][a-z0-9+.-]*:/i.test(startUrl)) {
+  startUrl = `https://${startUrl}`;
+}
+
+const depth = args.depth ? parseInt(args.depth, 10) : 1;
+const max = args.max ? parseInt(args.max, 10) : 20;
+const include = args.include || null;
+const outDir = args.out
+  ? resolve(args.out)
+  : join(tmpdir(), `browse-tool-crawl-${Date.now()}`);
+mkdirSync(outDir, { recursive: true });
+
+function slugFor(url, seen) {
+  const u = new URL(url);
+  let slug = (u.pathname === "/" ? "index" : u.pathname)
+    .replace(/^\/|\/$/g, "")
+    .replace(/[^a-z0-9]+/gi, "-")
+    .toLowerCase() || "index";
+  let candidate = slug;
+  let n = 2;
+  while (seen.has(candidate)) candidate = `${slug}-${n++}`;
+  seen.add(candidate);
+  return candidate;
+}
+
+const browser = await connect();
+const page = await activeOrFirstPage(browser);
+
+const visited = new Set();
+const slugs = new Set();
+const queue = [{ url: startUrl, depth: 0 }];
+const manifest = [];
+
+try {
+  while (queue.length > 0 && visited.size < max) {
+    const { url, depth: pageDepth } = queue.shift();
+    const normalized = new URL(url);
+    normalized.hash = "";
+    if (visited.has(normalized.href)) continue;
+    visited.add(normalized.href);
+
+    let html, finalUrl;
+    try {
+      await page.goto(normalized.href, {
+        waitUntil: args.wait ? "networkidle2" : "domcontentloaded",
+        timeout: 30000,
+      });
+      finalUrl = page.url();
+      html = await page.content();
+    } catch (err) {
+      console.error(`skip ${normalized.href}: ${err.message}`);
+      continue;
+    }
+
+    const { title, markdown } = htmlToMarkdown(html, finalUrl);
+    const slug = slugFor(finalUrl, slugs);
+    const outPath = join(outDir, `${slug}.md`);
+    writeFileSync(outPath, `# ${title || finalUrl}\n\nsource: ${finalUrl}\n\n${markdown}\n`);
+    manifest.push({ url: finalUrl, title: title || null, file: outPath });
+    console.log(outPath);
+
+    if (pageDepth < depth) {
+      const prefix = include || new URL(startUrl).origin;
+      for (const link of sameOriginLinks(html, finalUrl)) {
+        if (!link.startsWith(prefix)) continue;
+        if (!visited.has(link)) queue.push({ url: link, depth: pageDepth + 1 });
+      }
+    }
+  }
+
+  writeFileSync(join(outDir, "manifest.json"), JSON.stringify(manifest, null, 2));
+  console.error(`crawled ${manifest.length} page(s) -> ${outDir}`);
+} finally {
+  browser.disconnect();
+}

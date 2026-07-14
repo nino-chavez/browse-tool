@@ -12,7 +12,8 @@
     "browse-screenshot": "./bin/browse-screenshot",
     "browse-pick": "./bin/browse-pick",
     "browse-tabs": "./bin/browse-tabs",
-    "browse-markdown": "./bin/browse-markdown"
+    "browse-markdown": "./bin/browse-markdown",
+    "browse-crawl": "./bin/browse-crawl"
   },
   "dependencies": {
     "puppeteer-core": "^23.0.0",

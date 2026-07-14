@@ -1,8 +1,6 @@
 #!/usr/bin/env node
-import { Readability } from "@mozilla/readability";
-import { JSDOM } from "jsdom";
-import TurndownService from "turndown";
 import { connect, activeOrFirstPage, parseArgs } from "../lib/connect.js";
+import { htmlToMarkdown } from "../lib/extract.js";
 
 const args = parseArgs(process.argv.slice(2), { wait: "bool", raw: "bool" });
 let url = args._[0];
@@ -40,33 +38,10 @@ try {
 
   const finalUrl = page.url();
   const html = await page.content();
+  const { title, markdown } = htmlToMarkdown(html, finalUrl, { raw: !!args.raw });
 
-  const dom = new JSDOM(html, { url: finalUrl });
-  const turndown = new TurndownService({
-    headingStyle: "atx",
-    codeBlockStyle: "fenced",
-  });
-  turndown.remove(["script", "style", "noscript"]);
-
-  let title, contentHtml;
-  if (args.raw) {
-    title = dom.window.document.title;
-    contentHtml = dom.window.document.body.innerHTML;
-  } else {
-    const article = new Readability(dom.window.document).parse();
-    if (article) {
-      title = article.title;
-      contentHtml = article.content;
-    } else {
-      // Readability found no article-shaped content (dashboards, SPAs, listings) — fall back to full body.
-      title = dom.window.document.title;
-      contentHtml = dom.window.document.body.innerHTML;
-    }
-  }
-
-  const markdown = turndown.turndown(contentHtml || "");
   if (title) console.log(`# ${title}\n`);
-  console.log(markdown.trim());
+  console.log(markdown);
 } catch (err) {
   console.error(`browse-markdown failed: ${err.message}`);
   process.exitCode = 1;

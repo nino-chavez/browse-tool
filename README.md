@@ -1,6 +1,6 @@
 # browse-tool
 
-Minimal Bash-invokable browser tools for coding agents. Replaces Chrome DevTools MCP and Playwright MCP with ~8 small CLI scripts totaling a few hundred tokens to describe. Agents rely on standard DOM/JS knowledge instead of memorizing tool schemas.
+Minimal Bash-invokable browser tools for coding agents. Replaces Chrome DevTools MCP and Playwright MCP with ~9 small CLI scripts totaling a few hundred tokens to describe. Agents rely on standard DOM/JS knowledge instead of memorizing tool schemas.
 
 Inspired by Mario Zechner's [What if you don't need MCP at all?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/).
 
@@ -64,6 +64,9 @@ Navigate to URL, wait for readiness, optionally wait for a selector or additiona
 ### `browse-markdown <url> [--wait] [--wait-ms <n>] [--wait-for <selector>] [--raw]`
 Navigate to URL, strip nav/ads/boilerplate with Readability, convert the main content to markdown with Turndown. Prints `# title` + markdown body to stdout. Falls back to the full page body if Readability finds no article-shaped content (dashboards, SPAs, listings) — `--raw` skips Readability entirely and always converts the full body. Use this instead of `browse-eval 'return document.body.innerText'` when you want clean, LLM-ready text from an article/blog/docs page rather than raw eval output.
 
+### `browse-crawl <start-url> [--depth N] [--include prefix] [--max N] [--out dir] [--wait]`
+BFS crawl from `start-url`, following same-origin links (or links matching `--include prefix` for a narrower scope) up to `--depth` levels deep (default `1`: the start page plus its direct links), capped at `--max` pages total (default `20`). Each visited page is written as clean markdown (Readability + Turndown, same extraction as `browse-markdown`) to `--out dir` (default a fresh temp dir), plus a `manifest.json` listing `{url, title, file}` for every page. Prints each file path to stdout as it's written; prints the final page count and output dir to stderr. Visited URLs are deduped (fragment-stripped) so it never re-fetches a page.
+
 ### `browse-tabs [list | close <index>]`
 List open tabs with their URL/title, or close a tab by index.
 
@@ -98,18 +101,12 @@ browse-start
 browse-markdown https://example.com/blog/some-post > /tmp/post.md
 ```
 
-**Crawl a small site (depth-limited, same-origin) — no dedicated command, compose from primitives:**
+**Crawl a small docs site (depth-limited, same-origin):**
 ```bash
 browse-start
-browse-nav https://example.com/docs
-links=$(browse-eval 'return [...document.querySelectorAll("a[href]")]
-  .map(a => a.href)
-  .filter(h => h.startsWith("https://example.com/docs"))')
-for url in $(echo "$links" | jq -r '.[]' | sort -u); do
-  browse-markdown "$url" > "/tmp/docs-$(basename "$url").md"
-done
+browse-crawl https://example.com/docs --depth 2 --max 30 --out /tmp/docs-crawl
+cat /tmp/docs-crawl/manifest.json
 ```
-Bump this to a real `browse-crawl` command only if you find yourself writing this loop often — see "Why not MCP?" below for why one-off scripts are preferred over pre-built commands.
 
 ## Why not MCP?
 
