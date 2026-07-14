@@ -46,6 +46,7 @@ try {
     headingStyle: "atx",
     codeBlockStyle: "fenced",
   });
+  turndown.remove(["script", "style", "noscript"]);
 
   let title, contentHtml;
   if (args.raw) {
