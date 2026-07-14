@@ -20,6 +20,12 @@ if (!/^[a-z][a-z0-9+.-]*:/i.test(startUrl)) {
 
 const depth = args.depth ? parseInt(args.depth, 10) : 1;
 const max = args.max ? parseInt(args.max, 10) : 20;
+if (!Number.isInteger(depth) || depth < 0 || !Number.isInteger(max) || max < 1) {
+  console.error(
+    `Invalid --depth (${args.depth ?? 1}) or --max (${args.max ?? 20}) — both need integer values (--max >= 1). Did you forget the value after the flag?`,
+  );
+  process.exit(1);
+}
 const include = args.include || null;
 const outDir = args.out
   ? resolve(args.out)
@@ -61,7 +67,15 @@ try {
         waitUntil: args.wait ? "networkidle2" : "domcontentloaded",
         timeout: 30000,
       });
-      finalUrl = page.url();
+      const resolved = new URL(page.url());
+      resolved.hash = "";
+      finalUrl = resolved.href;
+      // Redirects land outside the requested URL — dedup on the resolved URL too,
+      // so a later link pointing straight at the redirect target is recognized as already fetched.
+      if (finalUrl !== normalized.href) {
+        if (visited.has(finalUrl)) continue;
+        visited.add(finalUrl);
+      }
       html = await page.content();
     } catch (err) {
       console.error(`skip ${normalized.href}: ${err.message}`);
