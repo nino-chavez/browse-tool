@@ -11,10 +11,14 @@
     "browse-eval": "./bin/browse-eval",
     "browse-screenshot": "./bin/browse-screenshot",
     "browse-pick": "./bin/browse-pick",
-    "browse-tabs": "./bin/browse-tabs"
+    "browse-tabs": "./bin/browse-tabs",
+    "browse-markdown": "./bin/browse-markdown"
   },
   "dependencies": {
-    "puppeteer-core": "^23.0.0"
+    "puppeteer-core": "^23.0.0",
+    "@mozilla/readability": "^0.5.0",
+    "jsdom": "^25.0.0",
+    "turndown": "^7.2.0"
   },
   "engines": {
     "node": ">=20"

@@ -1,6 +1,6 @@
 # browse-tool
 
-Minimal Bash-invokable browser tools for coding agents. Replaces Chrome DevTools MCP and Playwright MCP with ~7 small CLI scripts totaling a few hundred tokens to describe. Agents rely on standard DOM/JS knowledge instead of memorizing tool schemas.
+Minimal Bash-invokable browser tools for coding agents. Replaces Chrome DevTools MCP and Playwright MCP with ~8 small CLI scripts totaling a few hundred tokens to describe. Agents rely on standard DOM/JS knowledge instead of memorizing tool schemas.
 
 Inspired by Mario Zechner's [What if you don't need MCP at all?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/).
 
@@ -61,6 +61,9 @@ Capture the viewport (or full page with `--full`) as PNG. Prints the path so you
 ### `browse-shot <url> [--out path.png] [--full] [--wait] [--wait-ms <n>] [--wait-for <selector>]`
 Navigate to URL, wait for readiness, optionally wait for a selector or additional time, then screenshot in one command. Replaces the `browse-nav && sleep N && browse-screenshot` pattern. Prints the output path.
 
+### `browse-markdown <url> [--wait] [--wait-ms <n>] [--wait-for <selector>] [--raw]`
+Navigate to URL, strip nav/ads/boilerplate with Readability, convert the main content to markdown with Turndown. Prints `# title` + markdown body to stdout. Falls back to the full page body if Readability finds no article-shaped content (dashboards, SPAs, listings) — `--raw` skips Readability entirely and always converts the full body. Use this instead of `browse-eval 'return document.body.innerText'` when you want clean, LLM-ready text from an article/blog/docs page rather than raw eval output.
+
 ### `browse-tabs [list | close <index>]`
 List open tabs with their URL/title, or close a tab by index.
 
@@ -88,6 +91,25 @@ browse-eval 'return document.querySelectorAll("[data-testid]").length'
 ```bash
 browse-pick  # human clicks the element in Chrome
 ```
+
+**Read an article as clean markdown:**
+```bash
+browse-start
+browse-markdown https://example.com/blog/some-post > /tmp/post.md
+```
+
+**Crawl a small site (depth-limited, same-origin) — no dedicated command, compose from primitives:**
+```bash
+browse-start
+browse-nav https://example.com/docs
+links=$(browse-eval 'return [...document.querySelectorAll("a[href]")]
+  .map(a => a.href)
+  .filter(h => h.startsWith("https://example.com/docs"))')
+for url in $(echo "$links" | jq -r '.[]' | sort -u); do
+  browse-markdown "$url" > "/tmp/docs-$(basename "$url").md"
+done
+```
+Bump this to a real `browse-crawl` command only if you find yourself writing this loop often — see "Why not MCP?" below for why one-off scripts are preferred over pre-built commands.
 
 ## Why not MCP?
 

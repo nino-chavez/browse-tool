@@ -1,0 +1,74 @@
+#!/usr/bin/env node
+import { Readability } from "@mozilla/readability";
+import { JSDOM } from "jsdom";
+import TurndownService from "turndown";
+import { connect, activeOrFirstPage, parseArgs } from "../lib/connect.js";
+
+const args = parseArgs(process.argv.slice(2), { wait: "bool", raw: "bool" });
+let url = args._[0];
+
+if (!url) {
+  console.error(
+    "Usage: browse-markdown <url> [--wait] [--wait-ms <n>] [--wait-for <selector>] [--raw]",
+  );
+  process.exit(1);
+}
+
+if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) {
+  url = `https://${url}`;
+}
+
+const browser = await connect();
+const page = await activeOrFirstPage(browser);
+
+try {
+  await page.goto(url, {
+    waitUntil: args.wait ? "networkidle2" : "domcontentloaded",
+    timeout: 30000,
+  });
+
+  if (args["wait-for"]) {
+    await page.waitForSelector(args["wait-for"], { timeout: 10000 });
+  }
+
+  if (args["wait-ms"]) {
+    const ms = parseInt(args["wait-ms"], 10);
+    if (!isNaN(ms) && ms > 0) {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    }
+  }
+
+  const finalUrl = page.url();
+  const html = await page.content();
+
+  const dom = new JSDOM(html, { url: finalUrl });
+  const turndown = new TurndownService({
+    headingStyle: "atx",
+    codeBlockStyle: "fenced",
+  });
+
+  let title, contentHtml;
+  if (args.raw) {
+    title = dom.window.document.title;
+    contentHtml = dom.window.document.body.innerHTML;
+  } else {
+    const article = new Readability(dom.window.document).parse();
+    if (article) {
+      title = article.title;
+      contentHtml = article.content;
+    } else {
+      // Readability found no article-shaped content (dashboards, SPAs, listings) — fall back to full body.
+      title = dom.window.document.title;
+      contentHtml = dom.window.document.body.innerHTML;
+    }
+  }
+
+  const markdown = turndown.turndown(contentHtml || "");
+  if (title) console.log(`# ${title}\n`);
+  console.log(markdown.trim());
+} catch (err) {
+  console.error(`browse-markdown failed: ${err.message}`);
+  process.exitCode = 1;
+} finally {
+  browser.disconnect();
+}
