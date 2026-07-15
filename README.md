@@ -1,29 +1,45 @@
 # browse-tool
 
-Minimal Bash-invokable browser tools for coding agents. Replaces Chrome DevTools MCP and Playwright MCP with ~9 small CLI scripts totaling a few hundred tokens to describe. Agents rely on standard DOM/JS knowledge instead of memorizing tool schemas.
+<img src="assets/readme/hero.svg" alt="browse-tool: a coding agent drives Chrome from bash — browse-start, browse-nav, browse-eval returning &quot;Hacker News&quot; — described in a few hundred tokens versus the 13.7k (Playwright MCP) and 18.0k (Chrome DevTools MCP) an equivalent MCP loads up front." width="100%">
+
+Minimal Bash-invokable browser tools for coding agents. Nine small CLI scripts drive a real Chrome — navigate, run JS, screenshot, scrape to markdown, crawl — described in a few hundred tokens instead of the 13–18k an equivalent MCP loads up front. Agents lean on standard DOM/JS knowledge instead of memorizing tool schemas.
 
 Inspired by Mario Zechner's [What if you don't need MCP at all?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/).
+
+## Why not MCP?
+
+- Playwright MCP ≈ 13.7k tokens of tool schema, always loaded.
+- Chrome DevTools MCP ≈ 18.0k tokens.
+- browse-tool ≈ a few hundred tokens, loaded only when the agent reads this README.
+- Outputs pipe, save, and compose with ordinary shell tools.
+- Adding a command is a single file — no protocol, no rebuild, no restart.
+
+## Requirements
+
+- Node.js ≥ 20
+- Google Chrome, Chromium, or Chrome Canary installed (point `CHROME_PATH` at the binary if it isn't auto-detected)
 
 ## Install
 
 ```bash
-cd /Users/nino/Workspace/dev/tools/browse-tool
+git clone https://github.com/nino-chavez/browse-tool.git
+cd browse-tool
 npm install
 ```
 
-Put the bins on your PATH, e.g. in `~/.zshrc`:
+Put the bins on your PATH — in `~/.zshrc`:
 
 ```bash
-export PATH="$HOME/Workspace/dev/tools/browse-tool/bin:$PATH"
+export PATH="$HOME/path/to/browse-tool/bin:$PATH"
 ```
 
-Or launch Claude Code with the bins on PATH:
+Or launch Claude Code with the bins on PATH for one session (run from the repo root):
 
 ```bash
-alias cl='PATH=$HOME/Workspace/dev/tools/browse-tool/bin:$PATH claude'
+alias cl='PATH=$PWD/bin:$PATH claude'
 ```
 
-Then `/add-dir /Users/nino/Workspace/dev/tools/browse-tool` in Claude Code so the agent can `@README.md` for reference.
+Then `/add-dir <path-to-browse-tool>` in Claude Code so the agent can `@README.md` for reference.
 
 ## Commands
 
@@ -109,14 +125,6 @@ browse-start
 browse-crawl https://example.com/docs --depth 2 --max 30 --out /tmp/docs-crawl
 cat /tmp/docs-crawl/manifest.json
 ```
-
-## Why not MCP?
-
-- Playwright MCP ≈ 13.7k tokens of tool schema, always loaded.
-- Chrome DevTools MCP ≈ 18.0k tokens.
-- This README ≈ a few hundred tokens, loaded only when needed.
-- Outputs can be piped, saved, and composed with ordinary shell tools.
-- Adding a new command is a single file — no protocol, no rebuild, no restart.
 
 ## State & troubleshooting
 
