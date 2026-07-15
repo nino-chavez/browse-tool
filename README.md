@@ -2,7 +2,7 @@
 
 <img src="assets/readme/hero.svg" alt="browse-tool: a coding agent drives Chrome from bash — browse-start, browse-nav, browse-eval returning &quot;Hacker News&quot; — described in a few hundred tokens versus the 13.7k (Playwright MCP) and 18.0k (Chrome DevTools MCP) an equivalent MCP loads up front." width="100%">
 
-Minimal Bash-invokable browser tools for coding agents. Nine small CLI scripts drive a real Chrome — navigate, run JS, screenshot, scrape to markdown, crawl — described in a few hundred tokens instead of the 13–18k an equivalent MCP loads up front. Agents lean on standard DOM/JS knowledge instead of memorizing tool schemas.
+Minimal Bash-invokable browser tools for coding agents. Ten small CLI scripts drive a real Chrome — navigate, run JS, screenshot, scrape to markdown, crawl — described in a few hundred tokens instead of the 13–18k an equivalent MCP loads up front. Agents lean on standard DOM/JS knowledge instead of memorizing tool schemas.
 
 Inspired by Mario Zechner's [What if you don't need MCP at all?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/).
 
@@ -41,9 +41,15 @@ alias cl='PATH=$PWD/bin:$PATH claude'
 
 Then `/add-dir <path-to-browse-tool>` in Claude Code so the agent can `@README.md` for reference.
 
+## How it works
+
+<img src="assets/readme/how-it-works.svg" alt="browse-start launches one long-lived Chrome (remote debugging on :9222, port recorded in $TMPDIR/browse-tool-state.json); browse-stop kills it. Every other command is a thin client that reads the state file and drives the same browser, grouped as NAVIGATE (browse-nav, browse-tabs), INSPECT (browse-eval, browse-screenshot, browse-shot, browse-pick), and EXTRACT (browse-markdown, browse-crawl)." width="100%">
+
+`browse-start` launches one long-lived Chrome with remote debugging on `:9222` and records the port in `$TMPDIR/browse-tool-state.json`. Every other command is a thin client: it reads that state file, connects to the same browser, and drives the page — so navigation, evaluation, screenshots, and scraping all share one persistent session and your logged-in profile. `browse-stop` kills the browser and clears the state.
+
 ## Commands
 
-All commands connect to a single long-lived Chrome started by `browse-start`. State lives in `$TMPDIR/browse-tool-state.json`.
+Every command below connects to the Chrome that `browse-start` launched (see [How it works](#how-it-works)).
 
 ### `browse-start [--profile] [--profile-name <name>] [--reseed] [--headless] [--port 9222]`
 Launch Chrome with remote debugging. Profiles live persistently under `~/.browse-tool/profiles/<name>` so your logged-in state survives between sessions.
