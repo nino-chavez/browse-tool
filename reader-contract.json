@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "project": "browse-tool",
+  "defaults": {
+    "reader": "a coding agent or engineer choosing and operating lightweight browser automation",
+    "job": "understand the tradeoff, install the commands, and use the right command without guessing",
+    "assumedKnowledge": [
+      "shell commands",
+      "browser developer concepts",
+      "DOM and JavaScript basics"
+    ],
+    "plainness": "specialist",
+    "precisionLocks": [
+      "command names and flags",
+      "measured token counts",
+      "Chrome and CDP terminology",
+      "security boundaries"
+    ]
+  },
+  "surfaces": [
+    {
+      "name": "operator README",
+      "renderedRoots": [
+        "README.md"
+      ],
+      "sourceRoots": [
+        "README.md",
+        "bin"
+      ],
+      "allowTerms": [
+        "CDP",
+        "CLI",
+        "DOM",
+        "JavaScript",
+        "JSON",
+        "MCP",
+        "PID"
+      ],
+      "denyTerms": []
+    }
+  ]
+}

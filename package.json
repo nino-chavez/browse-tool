@@ -15,6 +15,9 @@
     "browse-markdown": "./bin/browse-markdown",
     "browse-crawl": "./bin/browse-crawl"
   },
+  "scripts": {
+    "reader:check": "node tools/lib/encounter-audit.mjs --root=. --strict"
+  },
   "dependencies": {
     "puppeteer-core": "^23.0.0",
     "@mozilla/readability": "^0.5.0",
