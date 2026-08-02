@@ -1,18 +1,50 @@
 #!/usr/bin/env node
 import { unlinkSync, existsSync } from "node:fs";
-import { STATE_FILE, readState } from "../lib/connect.js";
+import {
+  STATE_FILE,
+  DEFAULT_PORT,
+  readState,
+  portOwners,
+  profileOf,
+} from "../lib/connect.js";
 
+// Stop whatever actually holds the debugging port, not merely the pid we happen
+// to have recorded. Killing only the tracked pid is how orphans accumulate: the
+// record goes stale (or the kill fails with ESRCH), the state file is deleted,
+// and a live headless Chrome keeps the port. The next browse-start then reports
+// success while every command drives the survivor.
 const state = readState();
-if (!state?.pid) {
-  console.log("No running Chrome tracked.");
-  process.exit(0);
-}
+const port = state?.port ?? DEFAULT_PORT;
 
-try {
-  process.kill(state.pid, "SIGTERM");
-  console.log(`Stopped Chrome (pid ${state.pid}).`);
-} catch (err) {
-  console.error(`Kill failed: ${err.message}`);
+const targets = new Set(portOwners(port));
+if (state?.pid) targets.add(state.pid);
+
+if (!targets.size) {
+  console.log(`Nothing to stop (no tracked Chrome, nothing listening on port ${port}).`);
+} else {
+  for (const pid of targets) {
+    const label = `pid ${pid} (profile: ${profileOf(pid)})`;
+    try {
+      process.kill(pid, "SIGTERM");
+      console.log(`Stopped Chrome ${label}.`);
+    } catch (err) {
+      // ESRCH just means it was already gone — that is a clean outcome here,
+      // not the error the old version printed.
+      if (err.code === "ESRCH") console.log(`Already gone: ${label}.`);
+      else console.error(`Kill failed for ${label}: ${err.message}`);
+    }
+  }
 }
 
 if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
+
+// Report anything still holding the port, so a failure is visible now rather
+// than as mysterious wrong-browser behaviour later.
+const survivors = portOwners(port);
+if (survivors.length) {
+  console.error(
+    `\nStill listening on port ${port}: ${survivors.map((p) => `pid ${p} (${profileOf(p)})`).join(", ")}\n` +
+      `Kill manually before starting again.`,
+  );
+  process.exit(1);
+}

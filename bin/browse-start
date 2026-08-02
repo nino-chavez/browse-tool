@@ -4,7 +4,14 @@ import { mkdirSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { platform, homedir } from "node:os";
 import { join, basename } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { DEFAULT_PORT, STATE_FILE, parseArgs, readState } from "../lib/connect.js";
+import {
+  DEFAULT_PORT,
+  STATE_FILE,
+  parseArgs,
+  readState,
+  portOwners,
+  profileOf,
+} from "../lib/connect.js";
 
 const args = parseArgs(process.argv.slice(2), {
   profile: "bool",
@@ -16,13 +23,25 @@ const profileName =
   args["profile-name"] ??
   (basename(process.cwd()).replace(/[^a-z0-9._-]/gi, "-") || "default");
 
+// "Is the tracked pid alive" is not the same question as "does it own the port".
+// An orphan holding the port makes every later command drive the wrong browser
+// while this script reports success, so check ownership before taking the
+// already-running shortcut and before binding a fresh Chrome to a held port.
+const owners = portOwners(port);
 const existing = readState();
-if (existing?.pid) {
-  try {
-    process.kill(existing.pid, 0);
-    console.log(`Chrome already running (pid ${existing.pid}, port ${existing.port}).`);
-    process.exit(0);
-  } catch {}
+if (existing?.pid && owners.includes(existing.pid)) {
+  console.log(`Chrome already running (pid ${existing.pid}, port ${existing.port}).`);
+  process.exit(0);
+}
+if (owners.length) {
+  const who = owners.map((p) => `  pid ${p}  profile: ${profileOf(p)}`).join("\n");
+  console.error(
+    `Port ${port} is already held by a Chrome this tool is not tracking:\n${who}\n\n` +
+      `Left alone, every browse-* command would drive that browser instead of the one\n` +
+      `you are asking for. Run 'browse-stop' to clear it, or pass --port <n> for a\n` +
+      `second instance.`,
+  );
+  process.exit(1);
 }
 
 function findChrome() {
@@ -99,6 +118,19 @@ for (let i = 0; i < 40; i++) {
   try {
     const res = await fetch(`http://127.0.0.1:${port}/json/version`);
     if (res.ok) {
+      // A /json/version answer proves *something* is listening, not that it is
+      // the Chrome we just spawned. Confirm ownership before recording state,
+      // or we hand every later command a browser we never launched.
+      const bound = portOwners(port);
+      if (bound.length && !bound.includes(child.pid)) {
+        const who = bound.map((p) => `pid ${p} (profile: ${profileOf(p)})`).join(", ");
+        try { process.kill(child.pid, "SIGTERM"); } catch {}
+        console.error(
+          `Lost the race for port ${port}: it is held by ${who}, not the Chrome just started ` +
+            `(pid ${child.pid}, profile '${profileName}').\nThat Chrome was stopped. Run 'browse-stop', then retry.`,
+        );
+        process.exit(1);
+      }
       const info = await res.json();
       writeFileSync(
         STATE_FILE,

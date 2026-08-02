@@ -59,10 +59,35 @@ Launch Chrome with remote debugging. Profiles live persistently under `~/.browse
 - **`--reseed`** forces a fresh rsync over an existing profile (useful after you log into a new account in real Chrome).
 - **`--headless`** runs without a visible window.
 
+**Port ownership is verified, not assumed.** `browse-start` refuses to start when
+something it does not track already holds the debugging port, and names the
+squatter's pid and profile; after launching it confirms the port belongs to the
+Chrome it just spawned. `browse-eval` and friends refuse to connect when the
+port's owner is not the tracked pid. Fail-open: if `lsof` cannot answer, the
+checks are skipped rather than blocking work.
+
+Why this exists: the old code only checked that the recorded pid was *alive*,
+never that it owned the port. A headless orphan from a finished session could
+hold `9222` while `browse-start` reported success for a different profile, and
+every subsequent command — navigation, screenshots, cookie reads — ran against
+the orphan and succeeded. On 2026-08-02 that produced four false "logged out"
+readings and cost an 8.4 GB profile clone deleted on a false negative. A silent
+wrong-browser failure is worse than a loud refusal.
+
+- **`--profile` cannot transplant a logged-in Facebook session.** Cookies copy
+  fine, but `c_user`/`xs` are bound to the originating profile and Chrome drops
+  them; only `datr` survives. Log into the automation profile directly instead.
+  Chrome 136+ likewise refuses `--remote-debugging-port` on your real default
+  profile, so driving your everyday browser is not an option either.
+
 Parallel with real Chrome on macOS: browse-tool Chrome runs as its own process but macOS merges it with your real Chrome in the Dock (same app bundle). Use `Cmd+~` to cycle between their windows, or install Chromium / Chrome Canary and set `CHROME_PATH=/path/to/Chromium.app/Contents/MacOS/Chromium` for a truly separate Dock app.
 
 ### `browse-stop`
-Kill the managed Chrome and clear state.
+Kill whatever holds the debugging port — the tracked pid *and* any untracked
+Chrome listening on it — then clear state. Exits non-zero if anything is still
+listening afterwards. Killing only the tracked pid is how orphans accumulated:
+the kill failed with `ESRCH`, the state file was deleted anyway, and a live
+headless Chrome kept the port for the next session to trip over.
 
 ### `browse-nav <url> [--new] [--wait]`
 Navigate the active tab (or a new one with `--new`). `https://` is auto-prepended if the URL has no scheme. `--wait` waits for `networkidle2` instead of `domcontentloaded`. Prints final URL and title.

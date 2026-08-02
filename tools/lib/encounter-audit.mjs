@@ -342,11 +342,26 @@ function words(text) {
   return (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) || []).length;
 }
 
+// A link's query string and fragment are machine plumbing, not vocabulary the
+// reader parses: `?utm_source=facebook&utm_campaign=spring_finale` renders as a
+// clickable link, and flagging `utm_source` as an "internal-looking token that
+// reaches the reader" is a false positive. Worse, it is an UNBOUNDED one —
+// campaign values change every campaign, so the only way to silence it was to
+// keep appending one-off ids to allowTerms, which re-breaks on the next
+// campaign and trains operators to whitelist reflexively.
+//
+// The path is deliberately left intact. A segment like /second_screen IS
+// reader-visible jargon and should still be caught.
+function stripUrlParams(text) {
+  return text.replace(/\S*\/\S*/g, (run) => run.replace(/[?#]\S*$/, ""));
+}
+
 function opaqueTokens(text) {
   const out = new Set();
-  for (const m of text.matchAll(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g)) out.add(m[0]);
-  for (const m of text.matchAll(/\b[a-z][a-z0-9-]*:[a-z][a-z0-9_-]*\b/g)) out.add(m[0]);
-  for (const m of text.matchAll(/\bADR-\d{3,}\b/g)) out.add(m[0]);
+  const prose = stripUrlParams(text);
+  for (const m of prose.matchAll(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g)) out.add(m[0]);
+  for (const m of prose.matchAll(/\b[a-z][a-z0-9-]*:[a-z][a-z0-9_-]*\b/g)) out.add(m[0]);
+  for (const m of prose.matchAll(/\bADR-\d{3,}\b/g)) out.add(m[0]);
   return [...out];
 }
 
