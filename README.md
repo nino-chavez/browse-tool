@@ -88,7 +88,13 @@ export BROWSE_PORT=9223   # browse-start prints this line for you
 
 Why it matters: state used to be one global `browse-tool-state.json`. The most recent `browse-start` anywhere on the machine overwrote it, so `browse-stop` in one session read *another* session's port **and** pid, found that pid legitimately owning that port, and killed it — with nothing to flag, while its own Chrome survived unrecorded holding a port for the next session to trip over.
 
-Chrome permits one instance per profile. Because every session now defaults to the same `shared` profile, the usual answer to "already running" is to point `BROWSE_PORT` at the browser that exists rather than start a second one — `browse-start` detects the singleton lock and prints the port to use.
+A `BROWSE_PORT` or `--port` that does not parse is a hard error, never a fallback to 9222 — the default port is a browser other sessions may be using, so silently redirecting a typo there is the worst available response. (`--port` with no value is rejected too: it arrives as boolean `true`, and `Number(true)` is a perfectly valid-looking `1`.)
+
+Chrome permits one instance per profile. Because every session now defaults to the same `shared` profile, the usual answer to "already running" is to use the browser that exists rather than start a second one:
+
+- If the port is held by a Chrome running **the profile you asked for**, `browse-start` adopts it — records it in state and exits 0. Leaving it unrecorded would strand a live browser with no state entry, which silently disables the wrong-browser check (it fails open on a null state).
+- If the port is held by a **different** profile, it refuses and names the squatter.
+- If the profile is open but on another port, it reads Chrome's `SingletonLock`, names the holding pid, and prints the `BROWSE_PORT` to use.
 
 **Port ownership is verified, not assumed.** `browse-start` refuses to start when
 something it does not track already holds the debugging port, and names the
@@ -113,12 +119,20 @@ wrong-browser failure is worse than a loud refusal.
 
 Parallel with real Chrome on macOS: browse-tool Chrome runs as its own process but macOS merges it with your real Chrome in the Dock (same app bundle). Use `Cmd+~` to cycle between their windows, or install Chromium / Chrome Canary and set `CHROME_PATH=/path/to/Chromium.app/Contents/MacOS/Chromium` for a truly separate Dock app.
 
-### `browse-stop`
-Kill whatever holds the debugging port — the tracked pid *and* any untracked
-Chrome listening on it — then clear state. Exits non-zero if anything is still
-listening afterwards. Killing only the tracked pid is how orphans accumulated:
-the kill failed with `ESRCH`, the state file was deleted anyway, and a live
-headless Chrome kept the port for the next session to trip over.
+### `browse-stop [--port <n>] [--force]`
+Kill whatever holds the debugging port, then clear the state and the leases for
+that browser. Exits non-zero if anything is still listening afterwards. Killing
+only the tracked pid is how orphans accumulated: the kill failed with `ESRCH`,
+the state file was deleted anyway, and a live headless Chrome kept the port for
+the next session to trip over.
+
+**Refuses while other sessions hold live leases on that browser.** A shared
+browser is meant to outlive any one session, and this is the largest blast radius
+in the tool — stopping it closes every session's tabs. `--force` overrides. A
+lease with no recorded port (written before leases carried one) counts as a
+possible match and is reported as such: the guard fails closed, because an
+earlier version compared ports exactly, matched none of the eight live legacy
+leases, and killed the browser they were all using.
 
 ### `browse-nav <url> [--new] [--wait]`
 Navigate the active tab (or a new one with `--new`). `https://` is auto-prepended if the URL has no scheme. `--wait` waits for `networkidle2` instead of `domcontentloaded`. Prints final URL and title.

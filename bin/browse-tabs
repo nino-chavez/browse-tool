@@ -57,9 +57,17 @@ try {
       console.error("Usage: browse-tabs close <index|target-id> [--force]");
       process.exit(1);
     }
-    // A target id (or unique prefix) wins over an index: it survives renumbering.
-    let idx = ids.findIndex((id) => id && id.startsWith(key));
-    if (idx === -1 && /^\d+$/.test(key)) idx = Number(key);
+    // An in-range number is an index; anything else is matched as a target-id
+    // prefix. Order matters and the obvious order is wrong: Chrome targetIds are
+    // uppercase hex, so roughly ten in sixteen begin with a digit. Trying the id
+    // prefix first made `close 1` resolve to "the first tab whose id starts with
+    // 1" — closing a tab the user never named, which is the exact failure this
+    // command was rewritten to prevent.
+    const asIndex = /^\d+$/.test(String(key)) ? Number(key) : -1;
+    const idx =
+      asIndex >= 0 && asIndex < pages.length
+        ? asIndex
+        : ids.findIndex((id) => id && id.startsWith(String(key)));
     if (!pages[idx]) {
       console.error(`No tab matches '${key}'. Run 'browse-tabs list'.`);
       process.exit(1);

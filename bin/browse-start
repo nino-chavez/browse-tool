@@ -40,6 +40,9 @@ const SHARED_PROFILE = "shared";
 const profileName =
   args["profile-name"] ?? process.env.BROWSE_PROFILE ?? SHARED_PROFILE;
 
+const profilesRoot = join(homedir(), ".browse-tool", "profiles");
+const userDataDir = join(profilesRoot, profileName);
+
 // "Is the tracked pid alive" is not the same question as "does it own the port".
 // An orphan holding the port makes every later command drive the wrong browser
 // while this script reports success, so check ownership before taking the
@@ -51,9 +54,34 @@ if (existing?.pid && owners.includes(existing.pid)) {
   process.exit(0);
 }
 if (owners.length) {
+  // Adopt, rather than refuse, when the squatter IS the browser being asked for.
+  //
+  // A shared browser outlives the session that started it, so "running but
+  // untracked" is normal: the state file is per-port in $TMPDIR and any session
+  // may have started it or stopped tracking it. Refusing there is unhelpful and
+  // actively harmful — it strands a live Chrome with no state record, which
+  // silently disables assertPortIdentity (it fails open on a null state), losing
+  // the wrong-browser check for every later command. Recording it restores that.
+  const adopted = owners.find((p) => profileOf(p).replace(/ \[headless\]$/, "") === profileName);
+  if (adopted) {
+    writeFileSync(
+      STATE_FILE,
+      JSON.stringify(
+        { pid: adopted, port, userDataDir, profileName, adopted: true, started: Date.now() },
+        null,
+        2,
+      ),
+    );
+    console.log(
+      `Chrome already running on port ${port} with profile '${profileName}' (pid ${adopted}).\n` +
+        `Adopted it — no second browser started.`,
+    );
+    process.exit(0);
+  }
+
   const who = owners.map((p) => `  pid ${p}  profile: ${profileOf(p)}`).join("\n");
   console.error(
-    `Port ${port} is already held by a Chrome this tool is not tracking:\n${who}\n\n` +
+    `Port ${port} is already held by a Chrome running a DIFFERENT profile:\n${who}\n\n` +
       `Left alone, every browse-* command would drive that browser instead of the one\n` +
       `you are asking for. Run 'browse-stop' to clear it, or pass --port <n> for a\n` +
       `second instance.`,
@@ -82,8 +110,6 @@ function findChrome() {
 }
 
 const chrome = process.env.CHROME_PATH || findChrome();
-const profilesRoot = join(homedir(), ".browse-tool", "profiles");
-const userDataDir = join(profilesRoot, profileName);
 mkdirSync(userDataDir, { recursive: true });
 
 const profileIsEmpty = () => {

@@ -9,6 +9,9 @@ import {
   portOwners,
   profileOf,
   clearLeasesForPort,
+  allLeases,
+  isLive,
+  sessionId,
 } from "../lib/connect.js";
 
 // Stop whatever actually holds the debugging port, not merely the pid we happen
@@ -32,10 +35,61 @@ async function waitForPortRelease(port, graceMs) {
 // cross-session kill: session A would read session B's port, find B's pid as its
 // legitimate owner, and SIGTERM it with nothing to flag — while A's own Chrome
 // survived, unrecorded, holding a port for the next session to trip over.
-const args = parseArgs(process.argv.slice(2));
+const args = parseArgs(process.argv.slice(2), { force: "bool" });
 const port = resolvePort(args.port);
 const STATE_FILE = stateFile(port);
 const state = readState(port);
+
+// Refuse to stop a browser other sessions are working in.
+//
+// This is the largest blast radius in the tool and it was the only unguarded
+// one: browse-tabs refuses to close a single tab under another live lease, and
+// browse-start refuses a reseed while any lease is live, yet browse-stop killed
+// the whole browser and wiped everyone's leases without a word. With one shared
+// profile that is the default case — every session is on 9222.
+//
+// It also catches the near-miss: a session that started on --port 9223 and
+// forgot to export BROWSE_PORT runs a bare browse-stop, which resolves to 9222
+// and would take out the shared browser instead of its own.
+// A lease with no port is counted as a match. Leases written before the port
+// field existed have port === undefined, and an exact comparison excluded every
+// one of them — the guard failed open on precisely the population it was added
+// to protect, and killed a browser eight live sessions were using. A guard on a
+// destructive path fails CLOSED: unknown means "could be this one".
+//
+// clearLeasesForPort() treats the same undefined the opposite way, and that is
+// deliberate rather than inconsistent: there, matching means DELETING someone's
+// lease, so unknown must not match. Both readings err away from destruction.
+const me = sessionId();
+const others = allLeases().filter((l) => isLive(l) && l.id !== me);
+const onThisPort = [...new Set(others.filter((l) => l.port === port).map((l) => l.id))];
+const unknownPort = [...new Set(others.filter((l) => l.port === undefined).map((l) => l.id))];
+
+if ((onThisPort.length || unknownPort.length) && !args.force) {
+  const lines = [
+    `Refusing to stop the Chrome on port ${port}.`,
+    "",
+    ...(onThisPort.length
+      ? [`${onThisPort.length} live session(s) are driving it:`, ...onThisPort.map((s) => `  ${s}`)]
+      : []),
+    // Reported separately and honestly. Claiming these are "driving port N"
+    // would be a guess: the lease predates the port field, so it may belong to
+    // any browser. Blocking anyway is the fail-closed choice, but the message
+    // should not dress a guess up as a fact.
+    ...(unknownPort.length
+      ? [
+          `${unknownPort.length} live session(s) hold a lease with no recorded port,`,
+          `so they may be on this browser or another:`,
+          ...unknownPort.map((s) => `  ${s}`),
+        ]
+      : []),
+    "",
+    `Stopping it would close their tabs and clear their leases. Leave it running — a`,
+    `shared browser is meant to outlive any one session. Pass --force if you are sure.`,
+  ];
+  console.error(lines.join("\n"));
+  process.exit(1);
+}
 
 // Kill only what actually holds the target port.
 //
