@@ -131,11 +131,15 @@ the next session to trip over.
 
 **Refuses while other sessions hold live leases on that browser.** A shared
 browser is meant to outlive any one session, and this is the largest blast radius
-in the tool — stopping it closes every session's tabs. `--force` overrides. A
-lease with no recorded port (written before leases carried one) counts as a
-possible match and is reported as such: the guard fails closed, because an
-earlier version compared ports exactly, matched none of the eight live legacy
-leases, and killed the browser they were all using.
+in the tool — stopping it closes every session's tabs. `--force` overrides.
+
+A lease records the port it belongs to. One written before that field existed is
+attributed by asking the browser, over `/json/list`, whether it actually holds
+that lease's tab — an exact answer rather than a guess. Only when the browser
+cannot be asked does the lease count as a possible match and block. Both halves
+matter: an earlier version compared ports exactly, matched none of the eight live
+legacy leases, and killed the browser they were all using; the version after it
+blocked on every port for the twelve hours until those leases went stale.
 
 Presence is decided by `lsof` **or** a `/json/version` probe, not `lsof` alone.
 `portOwners()` returns an empty list both for "nothing is listening" and for

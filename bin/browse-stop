@@ -63,6 +63,31 @@ async function browserResponds(port, timeoutMs = 800) {
   }
 }
 
+/**
+ * targetIds open in the browser on `port`, or null if it could not be asked.
+ *
+ * This turns "which browser does that lease belong to?" from a guess into a
+ * lookup. Leases written before the port field carry no port, and the guard
+ * blocks on them because unknown must fail closed — but with seven such leases
+ * live, browse-stop was refusing on EVERY port for the twelve hours until they
+ * went stale, including ports those sessions demonstrably were not on. A lease
+ * names a target; asking the browser whether it has that target answers the
+ * question exactly.
+ */
+async function targetIdsOn(port, timeoutMs = 800) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/json/list`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) return null;
+    const list = await res.json();
+    if (!Array.isArray(list)) return null;
+    return new Set(list.map((t) => t?.id).filter(Boolean));
+  } catch {
+    return null;
+  }
+}
+
 // The port comes from --port / BROWSE_PORT, never from a file another session
 // can overwrite. Reading it from shared state was the other half of the
 // cross-session kill: session A would read session B's port, find B's pid as its
@@ -103,8 +128,19 @@ const browserPresent = targets.size > 0 || responds;
 // that was not there.
 const me = sessionId();
 const others = allLeases().filter((l) => isLive(l) && l.id !== me);
-const onThisPort = [...new Set(others.filter((l) => l.port === port).map((l) => l.id))];
-const unknownPort = [...new Set(others.filter((l) => l.port === undefined).map((l) => l.id))];
+
+// Ask the browser which targets it actually has, so a port-less lease can be
+// attributed instead of assumed. Only when it cannot be asked does "unknown"
+// stay unknown — and only then does the fail-closed block apply to it.
+const liveTargets = await targetIdsOn(port);
+const portless = others.filter((l) => l.port === undefined);
+const attributed = liveTargets ? portless.filter((l) => liveTargets.has(l.targetId)) : [];
+const unattributable = liveTargets ? [] : portless;
+
+const onThisPort = [
+  ...new Set([...others.filter((l) => l.port === port), ...attributed].map((l) => l.id)),
+];
+const unknownPort = [...new Set(unattributable.map((l) => l.id))];
 
 if (browserPresent && (onThisPort.length || unknownPort.length) && !args.force) {
   const lines = [
@@ -113,14 +149,14 @@ if (browserPresent && (onThisPort.length || unknownPort.length) && !args.force) 
     ...(onThisPort.length
       ? [`${onThisPort.length} live session(s) are driving it:`, ...onThisPort.map((s) => `  ${s}`)]
       : []),
-    // Reported separately and honestly. Claiming these are "driving port N"
-    // would be a guess: the lease predates the port field, so it may belong to
-    // any browser. Blocking anyway is the fail-closed choice, but the message
-    // should not dress a guess up as a fact.
+    // Only reaches here when the browser could not be asked for its target list.
+    // When it can, a port-less lease is attributed exactly and joins the group
+    // above; claiming it is "driving port N" without checking would be a guess,
+    // and blocking on the guess refused every port for twelve hours.
     ...(unknownPort.length
       ? [
-          `${unknownPort.length} live session(s) hold a lease with no recorded port,`,
-          `so they may be on this browser or another:`,
+          `${unknownPort.length} live session(s) hold a lease with no recorded port, and this`,
+          `browser could not be asked which tabs it has, so they may be on it:`,
           ...unknownPort.map((s) => `  ${s}`),
         ]
       : []),
