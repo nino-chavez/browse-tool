@@ -45,7 +45,7 @@ Then `/add-dir <path-to-browse-tool>` in Claude Code so the agent can `@README.m
 
 <img src="assets/readme/how-it-works.svg" alt="browse-start launches one long-lived Chrome (remote debugging on :9222, port recorded in $TMPDIR/browse-tool-state.json); browse-stop kills it. Every other command is a thin client that reads the state file and drives the same browser, grouped as NAVIGATE (browse-nav, browse-tabs), INSPECT (browse-eval, browse-screenshot, browse-shot, browse-pick), and EXTRACT (browse-markdown, browse-crawl)." width="100%">
 
-`browse-start` launches one long-lived Chrome with remote debugging on `:9222` and records the port in `$TMPDIR/browse-tool-state.json`. Every other command is a thin client: it reads that state file, connects to the same browser, and drives the page — so navigation, evaluation, screenshots, and scraping all share one persistent session and your logged-in profile. `browse-stop` kills the browser and clears the state.
+`browse-start` launches one long-lived Chrome with remote debugging on `:9222` and records the port in `$TMPDIR/browse-tool-state.json`. Every other command is a thin client: it reads that state file, connects to the same browser, and drives its own leased tab — so navigation, evaluation, screenshots, and scraping all share one persistent browser and one logged-in profile, while parallel sessions stay off each other's tabs. `browse-stop` kills the browser and clears the state.
 
 ## Commands
 
@@ -54,9 +54,24 @@ Every command below connects to the Chrome that `browse-start` launched (see [Ho
 ### `browse-start [--profile] [--profile-name <name>] [--reseed] [--headless] [--port 9222]`
 Launch Chrome with remote debugging. Profiles live persistently under `~/.browse-tool/profiles/<name>` so your logged-in state survives between sessions.
 
-- **Default profile name** is the basename of the current working directory — launching from `~/Workspace/dev/apps/rally-hq` auto-selects `~/.browse-tool/profiles/rally-hq`. Override with `--profile-name foo`.
+- **Default profile is `shared`** — one profile for every session, on every project. Override with `--profile-name foo` or `BROWSE_PROFILE=foo`.
+
+  This used to default to the basename of the current working directory, which silently turned "where you happened to be" into an identity: every repo, worktree and audit scratch dir minted its own Chrome profile. That reached 102 profiles / 74 GB, five of which had each separately downloaded the same 4 GB on-device model. Sessions now share one browser and isolate at the **tab** level instead (see *Parallel sessions* below), so logging into a site once covers every project.
+
+  **A separate profile is only warranted for simultaneous distinct authenticated identities on the same origin** — e.g. an admin account and a member account you need signed in at once. For a merely logged-out view, use `BROWSE_INCOGNITO=1` instead; it isolates cookies in a BrowserContext without a second profile on disk.
 - **`--profile`** on first run rsyncs your real Chrome default profile (cookies, logins, extensions) into the target directory — **only when the target is empty**. Your real Chrome profile is never modified. On subsequent runs the flag is a no-op; the persistent profile is reused as-is.
-- **`--reseed`** forces a fresh rsync over an existing profile (useful after you log into a new account in real Chrome).
+- **`--reseed`** forces a fresh rsync over an existing profile (useful after you log into a new account in real Chrome). Refused on the `shared` profile while other sessions hold live tab leases — reseeding rewrites `Default/` and would change identity underneath them.
+
+### Parallel sessions
+
+Independent Claude and Codex sessions all drive **one** Chrome on one profile. Each session gets its own tab, leased by session id (`CLAUDE_CODE_SESSION_ID` / `CODEX_COMPANION_SESSION_ID`, else `BROWSE_SESSION`, else the parent pid). Leases are one file per session under `~/.browse-tool/leases/` — deliberately not the shared state file, since every `browse-*` command is a separate process and concurrent writes to one JSON would be a race.
+
+This matters because the old behaviour picked "whichever page looks active", and two independent processes provably selected the *same* tab — so parallel sessions silently drove each other's browser.
+
+- Cookies and logins are shared across sessions (same profile, same default context). That is the point: log in once.
+- `BROWSE_INCOGNITO=1` gives the session an isolated BrowserContext — its own cookies and storage, no second profile on disk. Verified isolated from the shared context.
+- `BROWSE_SHARED_TAB=1` restores the old "active or first page" behaviour, for single-session use or driving a tab you opened by hand.
+- `browse-stop` clears all leases along with the browser. It stops **only what holds its target port** — `$TMPDIR/browse-tool-state.json` is a single global file, so the most recent `browse-start` anywhere on the machine overwrites it, and trusting the recorded pid meant one session could kill another session's Chrome on a different port. A recorded pid that does not own the port is reported as stale and left alone.
 - **`--headless`** runs without a visible window.
 
 **Port ownership is verified, not assumed.** `browse-start` refuses to start when

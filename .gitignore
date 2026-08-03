@@ -1,3 +1,6 @@
 node_modules/
 *.log
 .DS_Store
+
+# Machine-local agent state: per-machine permission grants and session toggles.
+.claude/

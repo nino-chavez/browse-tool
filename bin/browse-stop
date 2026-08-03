@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { unlinkSync, existsSync } from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 import {
   STATE_FILE,
   DEFAULT_PORT,
   readState,
   portOwners,
   profileOf,
+  clearAllLeases,
 } from "../lib/connect.js";
 
 // Stop whatever actually holds the debugging port, not merely the pid we happen
@@ -13,11 +15,37 @@ import {
 // record goes stale (or the kill fails with ESRCH), the state file is deleted,
 // and a live headless Chrome keeps the port. The next browse-start then reports
 // success while every command drives the survivor.
+/** Owners of `port` after giving an accepted SIGTERM time to actually land. */
+async function waitForPortRelease(port, graceMs) {
+  const deadline = Date.now() + graceMs;
+  let owners = portOwners(port);
+  while (owners.length && Date.now() < deadline) {
+    await sleep(100);
+    owners = portOwners(port);
+  }
+  return owners;
+}
+
 const state = readState();
 const port = state?.port ?? DEFAULT_PORT;
 
+// Kill only what actually holds the target port.
+//
+// This used to be portOwners(port) ∪ {state.pid}, which is unsafe now that
+// sessions run concurrently: STATE_FILE is a single global file in $TMPDIR, so
+// the most recent browse-start anywhere on the machine overwrites it. A
+// browse-stop in session A would then read session B's pid and kill B's browser
+// — observed, on a Chrome bound to an entirely different port. A pid that does
+// not own this port is not ours to signal; report it as stale and drop it.
 const targets = new Set(portOwners(port));
-if (state?.pid) targets.add(state.pid);
+const stalePid = state?.pid && !targets.has(state.pid) ? state.pid : null;
+
+if (stalePid) {
+  console.log(
+    `Ignoring recorded pid ${stalePid} (profile: ${profileOf(stalePid)}): it does not hold ` +
+      `port ${port}, so it belongs to another session. Clearing stale state only.`,
+  );
+}
 
 if (!targets.size) {
   console.log(`Nothing to stop (no tracked Chrome, nothing listening on port ${port}).`);
@@ -38,9 +66,21 @@ if (!targets.size) {
 
 if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
 
+// Tab leases point at targets inside the Chrome we just killed. Left behind,
+// the next session would spend a lookup miss on every command before falling
+// through to a fresh tab. Stopping the browser ends every session's claim on it.
+clearAllLeases();
+
 // Report anything still holding the port, so a failure is visible now rather
 // than as mysterious wrong-browser behaviour later.
-const survivors = portOwners(port);
+//
+// SIGTERM is asynchronous: Chrome unwinds and releases the listening socket
+// some milliseconds after the signal is accepted. Checking immediately reported
+// "still listening" and exited 1 on a kill that had in fact succeeded, which
+// trained the reader to ignore this message — the exact opposite of the point.
+// Poll for release, and only call it a survivor once it outlives the grace
+// period.
+const survivors = await waitForPortRelease(port, 3000);
 if (survivors.length) {
   console.error(
     `\nStill listening on port ${port}: ${survivors.map((p) => `pid ${p} (${profileOf(p)})`).join(", ")}\n` +

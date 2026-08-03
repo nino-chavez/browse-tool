@@ -2,7 +2,7 @@
 import { spawn, execSync } from "node:child_process";
 import { mkdirSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { platform, homedir } from "node:os";
-import { join, basename } from "node:path";
+import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
   DEFAULT_PORT,
@@ -12,6 +12,7 @@ import {
   portOwners,
   profileOf,
 } from "../lib/connect.js";
+import { liveLeaseCount } from "../lib/session.js";
 
 const args = parseArgs(process.argv.slice(2), {
   profile: "bool",
@@ -19,9 +20,22 @@ const args = parseArgs(process.argv.slice(2), {
   reseed: "bool",
 });
 const port = Number(args.port ?? DEFAULT_PORT);
+// One shared profile by default.
+//
+// This used to default to basename(process.cwd()), which silently made the
+// working directory an identity: every repo, worktree and audit scratch dir got
+// its own Chrome profile. That reached 102 profiles / 74 GB, five of which had
+// each downloaded the same 4 GB on-device model. Sessions share one browser and
+// isolate at the tab level instead (see lib/session.js); logins are shared,
+// which is the point — you log into a site once, not once per directory.
+//
+// A separate profile is only warranted for simultaneous DISTINCT authenticated
+// identities on the same origin (e.g. meta-admin vs meta-setup). Pass
+// --profile-name for those. For a logged-out view, prefer BROWSE_INCOGNITO=1,
+// which isolates cookies in a BrowserContext without a second profile on disk.
+const SHARED_PROFILE = "shared";
 const profileName =
-  args["profile-name"] ??
-  (basename(process.cwd()).replace(/[^a-z0-9._-]/gi, "-") || "default");
+  args["profile-name"] ?? process.env.BROWSE_PROFILE ?? SHARED_PROFILE;
 
 // "Is the tracked pid alive" is not the same question as "does it own the port".
 // An orphan holding the port makes every later command drive the wrong browser
@@ -76,6 +90,23 @@ const profileIsEmpty = () => {
     return true;
   }
 };
+
+// Seeding rsyncs your real Chrome profile over this one. On the SHARED profile
+// that rewrites the identity every other live session is currently using, so a
+// reseed is refused while anyone holds a tab lease. An initial seed of an empty
+// shared profile is fine — nobody is using it yet.
+if (args.reseed && profileName === SHARED_PROFILE && !profileIsEmpty()) {
+  const live = liveLeaseCount();
+  if (live > 0) {
+    console.error(
+      `Refusing to reseed the shared profile: ${live} live session lease(s) are using it.\n` +
+        `Reseeding rsyncs over Default/ and would change identity underneath them.\n` +
+        `Either wait for those sessions to finish, or seed a named profile instead:\n` +
+        `  browse-start --profile --profile-name <name>`,
+    );
+    process.exit(1);
+  }
+}
 
 const shouldSeed = args.profile && (profileIsEmpty() || args.reseed);
 if (args.profile && !shouldSeed) {
