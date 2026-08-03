@@ -146,10 +146,14 @@ unrelated server on the port is not mistaken for a browser.
 
 The probe does **not** cover the window where a Chrome has spawned but is not yet
 listening — a TCP connect is refused then, so it reports absent exactly as `lsof`
-does. That window is handled structurally instead: **other sessions' leases are
-cleared only when a browser was actually stopped.** When nothing is stopped, only
-your own lease goes, so a browser that was seconds from serving those leases
-keeps them.
+does. That window is handled structurally instead: **leases are cleared only
+after the port is confirmed released**, never merely because a `SIGTERM` was
+sent. A signal accepted but not acted on within the grace period (hung renderer,
+a modal blocking shutdown) leaves every lease intact and exits non-zero.
+
+When nothing was stopped, only *your own* lease **for that port** is cleared —
+not your leases generally. A `browse-stop --port 9333` that finds nothing must
+not delete your live 9222 lease and orphan the tab you are working in.
 
 If a browser answers but no owning process can be identified, nothing is stopped
 and the run exits non-zero. `--force` does not help there — it overrides the

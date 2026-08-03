@@ -9,7 +9,6 @@ import {
   portOwners,
   profileOf,
   clearLeasesForPort,
-  clearLease,
   allLeases,
   isLive,
   sessionId,
@@ -192,38 +191,49 @@ if (!targets.size) {
   }
 }
 
+// Confirm the browser is gone BEFORE touching state or leases.
+//
+// SIGTERM is asynchronous: Chrome unwinds and releases the listening socket some
+// milliseconds after the signal is accepted. Checking immediately reported "still
+// listening" and exited 1 on a kill that had in fact succeeded, which trained the
+// reader to ignore this message — the exact opposite of the point. So poll, and
+// only call it a survivor once it outlives the grace period.
+//
+// Ordering matters as much as the poll. This ran AFTER the cleanup, which meant
+// "a browser was stopped" was really "a SIGTERM was sent": a signal accepted but
+// not acted on within the grace period (hung renderer, a modal blocking shutdown)
+// had already had every lease on its port deleted, and then printed "Kill
+// manually before starting again" — leases wiped for a browser still serving
+// them. Clean up only what is confirmed dead.
+const survivors = targets.size ? await waitForPortRelease(port, 3000) : [];
+if (survivors.length) {
+  console.error(
+    `\nStill listening on port ${port}: ${survivors.map((p) => `pid ${p} (${profileOf(p)})`).join(", ")}\n` +
+      `Nothing was cleared — that browser is still serving its tabs.\n` +
+      `Kill manually before starting again.`,
+  );
+  process.exit(1);
+}
+
 if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
 
-// Other sessions' leases are cleared only when a browser was ACTUALLY stopped.
+// Other sessions' leases are cleared only when a browser was CONFIRMED stopped.
 //
-// A lease points at a target inside a specific browser; killing that browser is
+// A lease points at a target inside a specific browser; that browser dying is
 // what makes the lease dangling, and clearing it then is a courtesy. Clearing it
 // when nothing was stopped is a guess about a browser we could not see — and it
 // is the guess that made the spawned-but-not-yet-listening window dangerous,
 // because leases would be wiped for a Chrome that was seconds from serving them.
-// Gating on the kill removes that window structurally, rather than trying to
-// detect it. With nothing stopped, only this session's own lease goes.
-if (targets.size) {
-  const cleared = clearLeasesForPort(port);
-  if (cleared) console.log(`Cleared ${cleared} tab lease(s) for port ${port}.`);
-} else {
-  clearLease();
-}
-
-// Report anything still holding the port, so a failure is visible now rather
-// than as mysterious wrong-browser behaviour later.
+// Gating on the confirmed stop removes that window structurally, rather than
+// trying to detect it.
 //
-// SIGTERM is asynchronous: Chrome unwinds and releases the listening socket
-// some milliseconds after the signal is accepted. Checking immediately reported
-// "still listening" and exited 1 on a kill that had in fact succeeded, which
-// trained the reader to ignore this message — the exact opposite of the point.
-// Poll for release, and only call it a survivor once it outlives the grace
-// period.
-const survivors = await waitForPortRelease(port, 3000);
-if (survivors.length) {
-  console.error(
-    `\nStill listening on port ${port}: ${survivors.map((p) => `pid ${p} (${profileOf(p)})`).join(", ")}\n` +
-      `Kill manually before starting again.`,
+// With nothing stopped, only this session's own lease FOR THIS PORT goes.
+// Not clearLease(), which is keyed by session and mode with no port: a
+// `browse-stop --port 9333` that found nothing would then delete this session's
+// live 9222 lease, orphaning its own tab.
+const cleared = clearLeasesForPort(port, { sessionOnly: !targets.size });
+if (cleared) {
+  console.log(
+    `Cleared ${cleared} tab lease(s) for port ${port}${targets.size ? "" : " (this session's only)"}.`,
   );
-  process.exit(1);
 }
