@@ -9,6 +9,7 @@ import {
   portOwners,
   profileOf,
   clearLeasesForPort,
+  clearLease,
   allLeases,
   isLive,
   sessionId,
@@ -31,21 +32,33 @@ async function waitForPortRelease(port, graceMs) {
 }
 
 /**
- * Is a debuggable browser answering on this port?
+ * Is a debuggable BROWSER answering on this port?
  *
- * portOwners() returns [] for two very different situations — "nothing is
- * listening" and "lsof could not tell me" — and it is documented to fail open so
- * it never blocks ordinary work. Gating a DESTRUCTIVE guard on that value turns
- * the fail-open into a fail-open on the wrong side. This probe distinguishes
- * them: it also catches the window where another session's Chrome has spawned
- * but is not yet listening.
+ * portOwners() returns [] for two different situations — "nothing is listening"
+ * and "lsof could not tell me" — and it is documented to fail open so it never
+ * blocks ordinary work. Gating a destructive guard on that alone points the
+ * fail-open the wrong way. This probe covers the second case.
+ *
+ * It does NOT cover the window where a Chrome has spawned but is not yet
+ * listening: a TCP connect is refused then, so fetch throws and this returns
+ * false, exactly as lsof returns []. An earlier version of this comment claimed
+ * otherwise. That window is handled structurally instead — nothing is stopped,
+ * so no other session's lease is cleared (see the end of this file).
+ *
+ * res.ok is not enough on its own: any HTTP 200 counts, and a dev server with
+ * SPA history-fallback returns 200 for unknown paths, which would produce
+ * "Refusing to stop the Chrome" for a Chrome that is not there. Verified against
+ * a plain node http server. Require the DevTools payload, as browse-start
+ * already does with info.Browser.
  */
 async function browserResponds(port, timeoutMs = 800) {
   try {
     const res = await fetch(`http://127.0.0.1:${port}/json/version`, {
       signal: AbortSignal.timeout(timeoutMs),
     });
-    return res.ok;
+    if (!res.ok) return false;
+    const info = await res.json();
+    return Boolean(info?.webSocketDebuggerUrl || info?.Browser);
   } catch {
     return false;
   }
@@ -130,14 +143,20 @@ if (browserPresent && (onThisPort.length || unknownPort.length) && !args.force) 
   process.exit(1);
 }
 
-// A browser is answering but lsof could not name its pid, so there is nothing to
-// signal. Say so and change nothing: deleting the state and leases here would
-// orphan every session's tab while the browser they point at keeps running.
+// A browser is answering but lsof could not name its pid, so there is no process
+// to signal. This is reported rather than silently treated as "nothing to stop",
+// because the browser is demonstrably there.
+//
+// --force does not help here and the message says so: force overrides the
+// live-session guard, not the absence of a pid. An earlier version justified
+// this branch by claiming that clearing state "would orphan every session using
+// that browser" without ever consulting the lease sets computed above — a
+// rationale that did not match its own condition.
 if (responds && !targets.size) {
   console.error(
-    `A browser is answering on port ${port}, but its process could not be identified ` +
-      `(lsof returned nothing).\nNothing was stopped and no state was cleared — clearing it ` +
-      `would orphan the tabs of every session using that browser.\nQuit it by hand, then re-run.`,
+    `A browser is answering on port ${port}, but no process could be identified as its ` +
+      `owner (lsof returned nothing).\nThere is no pid to signal, so nothing was stopped — ` +
+      `--force cannot change that.\nQuit it by hand, then re-run.`,
   );
   process.exit(1);
 }
@@ -175,15 +194,21 @@ if (!targets.size) {
 
 if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
 
-// Tab leases point at targets inside the Chrome we just killed. Left behind,
-// the next session would spend a lookup miss on every command before falling
-// through to a fresh tab.
+// Other sessions' leases are cleared only when a browser was ACTUALLY stopped.
 //
-// Scoped to this port: clearing every lease on the machine would orphan the tabs
-// of sessions driving a different browser entirely, including on the path where
-// there was nothing to stop in the first place.
-const cleared = clearLeasesForPort(port);
-if (cleared) console.log(`Cleared ${cleared} tab lease(s) for port ${port}.`);
+// A lease points at a target inside a specific browser; killing that browser is
+// what makes the lease dangling, and clearing it then is a courtesy. Clearing it
+// when nothing was stopped is a guess about a browser we could not see — and it
+// is the guess that made the spawned-but-not-yet-listening window dangerous,
+// because leases would be wiped for a Chrome that was seconds from serving them.
+// Gating on the kill removes that window structurally, rather than trying to
+// detect it. With nothing stopped, only this session's own lease goes.
+if (targets.size) {
+  const cleared = clearLeasesForPort(port);
+  if (cleared) console.log(`Cleared ${cleared} tab lease(s) for port ${port}.`);
+} else {
+  clearLease();
+}
 
 // Report anything still holding the port, so a failure is visible now rather
 // than as mysterious wrong-browser behaviour later.

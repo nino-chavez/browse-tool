@@ -140,11 +140,20 @@ leases, and killed the browser they were all using.
 Presence is decided by `lsof` **or** a `/json/version` probe, not `lsof` alone.
 `portOwners()` returns an empty list both for "nothing is listening" and for
 "could not determine", and it is deliberately fail-open so it never blocks
-ordinary work — but gating a destructive guard on it made the fail-open point the
-wrong way, including during the seconds another session's Chrome has spawned and
-is not yet listening. If a browser answers but its pid cannot be identified,
-nothing is stopped and no state is cleared: clearing it would orphan every
-session's tabs while the browser they point at keeps running.
+ordinary work — gating a destructive guard on that alone points the fail-open the
+wrong way. The probe checks for the DevTools payload, not just HTTP 200, so an
+unrelated server on the port is not mistaken for a browser.
+
+The probe does **not** cover the window where a Chrome has spawned but is not yet
+listening — a TCP connect is refused then, so it reports absent exactly as `lsof`
+does. That window is handled structurally instead: **other sessions' leases are
+cleared only when a browser was actually stopped.** When nothing is stopped, only
+your own lease goes, so a browser that was seconds from serving those leases
+keeps them.
+
+If a browser answers but no owning process can be identified, nothing is stopped
+and the run exits non-zero. `--force` does not help there — it overrides the
+live-session guard, not the absence of a pid to signal.
 
 ### `browse-nav <url> [--new] [--wait]`
 Navigate the active tab (or a new one with `--new`). `https://` is auto-prepended if the URL has no scheme. `--wait` waits for `networkidle2` instead of `domcontentloaded`. Prints final URL and title.

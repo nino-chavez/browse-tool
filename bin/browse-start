@@ -9,6 +9,7 @@ import {
   resolvePort,
   stateFile,
   parseArgs,
+  readState,
   portOwners,
   portsOf,
   profileOf,
@@ -42,11 +43,12 @@ const profileName =
 const profilesRoot = join(homedir(), ".browse-tool", "profiles");
 const userDataDir = join(profilesRoot, profileName);
 
+// One path for "the port is already taken", deliberately.
+//
 // "Is the tracked pid alive" is not the same question as "does it own the port".
 // An orphan holding the port makes every later command drive the wrong browser
-// while this script reports success, so check ownership before taking the
-// already-running shortcut and before binding a fresh Chrome to a held port.
-// One path for "the port is already taken", deliberately.
+// while this script reports success, so ownership is established from lsof
+// before anything else.
 //
 // There used to be a fast path above this: if the recorded pid owned the port,
 // print "Chrome already running" and exit 0. Because adoption WRITES the state
@@ -67,7 +69,24 @@ if (owners.length) {
   // silently disables assertPortIdentity (it fails open on a null state), losing
   // the wrong-browser check for every later command. Recording it restores that.
   const describe = (p) => profileOf(p); // "<profile>" or "<profile> [headless]"
-  const adopted = owners.find((p) => describe(p).replace(/ \[headless\]$/, "") === profileName);
+  const nameOf = (p) => describe(p).replace(/ \[headless\]$/, "");
+
+  // Two independent ways to recognise our own browser, because profileOf() is
+  // best-effort: it parses ps output, returns "unknown" when ps fails, and is
+  // still lossy for a profile name containing " --". Relying on it alone made
+  // browse-start hard-error "held by a Chrome running a DIFFERENT profile" about
+  // its own browser in those cases. The state file's pid is positive
+  // identification that does not go through ps at all.
+  //
+  // This is deliberately NOT the old fast path: it is consulted here, inside the
+  // adoption branch, so the profile / --reseed / headless checks below still run.
+  // The shortcut that skipped them is what made those checks unreachable.
+  const existing = readState(port);
+  const byPid =
+    existing?.pid && owners.includes(existing.pid) && existing.profileName === profileName
+      ? existing.pid
+      : null;
+  const adopted = owners.find((p) => nameOf(p) === profileName) ?? byPid;
   if (adopted) {
     // Adoption cannot satisfy --reseed, and must not report success as if it
     // had. Reseeding rsyncs --delete over Default/, which is precisely what the
