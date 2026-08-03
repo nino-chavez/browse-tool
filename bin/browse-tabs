@@ -18,7 +18,7 @@ import {
 const args = parseArgs(process.argv.slice(2), { force: "bool" });
 const cmd = args._[0] ?? "list";
 
-const browser = await connect();
+const browser = await connect(args.port);
 
 /** targetId of a page, via the public CDP surface. */
 async function targetIdOf(page) {

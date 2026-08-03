@@ -16,7 +16,7 @@ if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) {
   url = `https://${url}`;
 }
 
-const browser = await connect();
+const browser = await connect(args.port);
 const page = await activeOrFirstPage(browser);
 
 try {

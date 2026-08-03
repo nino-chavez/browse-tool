@@ -12,7 +12,7 @@ const out = args.out
 
 mkdirSync(dirname(out), { recursive: true });
 
-const browser = await connect();
+const browser = await connect(args.port);
 const page = await activeOrFirstPage(browser);
 
 try {

@@ -79,11 +79,14 @@ This matters because the old behaviour picked "whichever page looks active", and
 
 State lives in `$TMPDIR/browse-tool-state-<port>.json`. The port is a browser's identity everywhere in this tool — `browse-start` refuses a held port, `browse-stop` kills the port's owner — so the record is keyed the same way.
 
-A session on a non-default port must say so on every command:
+A session on a non-default port must say so on every command. `--port` works on
+every command, and `BROWSE_PORT` saves repeating it:
 
 ```bash
 browse-start --port 9223
 export BROWSE_PORT=9223   # browse-start prints this line for you
+
+browse-nav --port 9223 example.com   # or per-command
 ```
 
 Why it matters: state used to be one global `browse-tool-state.json`. The most recent `browse-start` anywhere on the machine overwrote it, so `browse-stop` in one session read *another* session's port **and** pid, found that pid legitimately owning that port, and killed it — with nothing to flag, while its own Chrome survived unrecorded holding a port for the next session to trip over.
@@ -133,6 +136,15 @@ lease with no recorded port (written before leases carried one) counts as a
 possible match and is reported as such: the guard fails closed, because an
 earlier version compared ports exactly, matched none of the eight live legacy
 leases, and killed the browser they were all using.
+
+Presence is decided by `lsof` **or** a `/json/version` probe, not `lsof` alone.
+`portOwners()` returns an empty list both for "nothing is listening" and for
+"could not determine", and it is deliberately fail-open so it never blocks
+ordinary work — but gating a destructive guard on it made the fail-open point the
+wrong way, including during the seconds another session's Chrome has spawned and
+is not yet listening. If a browser answers but its pid cannot be identified,
+nothing is stopped and no state is cleared: clearing it would orphan every
+session's tabs while the browser they point at keeps running.
 
 ### `browse-nav <url> [--new] [--wait]`
 Navigate the active tab (or a new one with `--new`). `https://` is auto-prepended if the URL has no scheme. `--wait` waits for `networkidle2` instead of `domcontentloaded`. Prints final URL and title.

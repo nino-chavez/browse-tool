@@ -45,7 +45,7 @@ function slugFor(url, seen) {
   return candidate;
 }
 
-const browser = await connect();
+const browser = await connect(args.port);
 const page = await activeOrFirstPage(browser);
 
 const visited = new Set();

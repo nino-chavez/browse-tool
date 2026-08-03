@@ -16,7 +16,7 @@ if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) {
   url = `https://${url}`;
 }
 
-const browser = await connect();
+const browser = await connect(args.port);
 // --new must claim the session's lease, not just open a tab. browser.newPage()
 // leaves the lease on the PREVIOUS tab, which is still open — so the following
 // browse-eval / browse-screenshot resolves that one and silently reads the wrong

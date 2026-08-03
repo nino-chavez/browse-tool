@@ -18,7 +18,7 @@ if (!code.trim()) {
   process.exit(1);
 }
 
-const browser = await connect();
+const browser = await connect(args.port);
 const page = await activeOrFirstPage(browser);
 
 try {

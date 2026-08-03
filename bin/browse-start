@@ -9,7 +9,6 @@ import {
   resolvePort,
   stateFile,
   parseArgs,
-  readState,
   portOwners,
   portsOf,
   profileOf,
@@ -47,12 +46,17 @@ const userDataDir = join(profilesRoot, profileName);
 // An orphan holding the port makes every later command drive the wrong browser
 // while this script reports success, so check ownership before taking the
 // already-running shortcut and before binding a fresh Chrome to a held port.
+// One path for "the port is already taken", deliberately.
+//
+// There used to be a fast path above this: if the recorded pid owned the port,
+// print "Chrome already running" and exit 0. Because adoption WRITES the state
+// file, taking it once guaranteed every later browse-start on that port hit the
+// fast path — which checked neither the profile nor --reseed nor headless mode.
+// So `--profile --reseed` reported success without reseeding, and
+// `--profile-name other` reported success while the running browser was
+// `shared`. A shortcut that skips the checks is worse than no shortcut: the
+// adoption branch below does the same job and validates first.
 const owners = portOwners(port);
-const existing = readState(port);
-if (existing?.pid && owners.includes(existing.pid)) {
-  console.log(`Chrome already running (pid ${existing.pid}, port ${existing.port}).`);
-  process.exit(0);
-}
 if (owners.length) {
   // Adopt, rather than refuse, when the squatter IS the browser being asked for.
   //

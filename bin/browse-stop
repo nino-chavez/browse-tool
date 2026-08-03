@@ -30,6 +30,27 @@ async function waitForPortRelease(port, graceMs) {
   return owners;
 }
 
+/**
+ * Is a debuggable browser answering on this port?
+ *
+ * portOwners() returns [] for two very different situations — "nothing is
+ * listening" and "lsof could not tell me" — and it is documented to fail open so
+ * it never blocks ordinary work. Gating a DESTRUCTIVE guard on that value turns
+ * the fail-open into a fail-open on the wrong side. This probe distinguishes
+ * them: it also catches the window where another session's Chrome has spawned
+ * but is not yet listening.
+ */
+async function browserResponds(port, timeoutMs = 800) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/json/version`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 // The port comes from --port / BROWSE_PORT, never from a file another session
 // can overwrite. Reading it from shared state was the other half of the
 // cross-session kill: session A would read session B's port, find B's pid as its
@@ -40,49 +61,40 @@ const port = resolvePort(args.port);
 const STATE_FILE = stateFile(port);
 const state = readState(port);
 
+const targets = new Set(portOwners(port));
+const responds = await browserResponds(port);
+const browserPresent = targets.size > 0 || responds;
+
 // Refuse to stop a browser other sessions are working in.
 //
 // This is the largest blast radius in the tool and it was the only unguarded
 // one: browse-tabs refuses to close a single tab under another live lease, and
 // browse-start refuses a reseed while any lease is live, yet browse-stop killed
 // the whole browser and wiped everyone's leases without a word. With one shared
-// profile that is the default case — every session is on 9222.
+// profile that is the default case — every session is on 9222. It also catches
+// the near-miss where a session started on --port 9223, forgot to export
+// BROWSE_PORT, and runs a bare browse-stop that resolves to 9222.
 //
-// It also catches the near-miss: a session that started on --port 9223 and
-// forgot to export BROWSE_PORT runs a bare browse-stop, which resolves to 9222
-// and would take out the shared browser instead of its own.
-// A lease with no port is counted as a match. Leases written before the port
-// field existed have port === undefined, and an exact comparison excluded every
-// one of them — the guard failed open on precisely the population it was added
-// to protect, and killed a browser eight live sessions were using. A guard on a
+// A lease with no port counts as a match. Leases written before the port field
+// existed have port === undefined, and an exact comparison excluded every one of
+// them — the guard failed open on precisely the population it was added to
+// protect, and killed a browser eight live sessions were using. A guard on a
 // destructive path fails CLOSED: unknown means "could be this one".
 //
 // clearLeasesForPort() treats the same undefined the opposite way, and that is
 // deliberate rather than inconsistent: there, matching means DELETING someone's
 // lease, so unknown must not match. Both readings err away from destruction.
 //
-// Gated on something actually listening. Leases outlive the browser by up to
-// STALE_MS, so a crashed Chrome left live leases behind and the guard announced
-// it was "Refusing to stop the Chrome on port N" for a browser that was not
-// there — the same dressing-a-guess-as-fact the note below warns against. With
-// nothing listening there is nothing to protect: fall through and clean up.
-const targets = new Set(portOwners(port));
-
-// A lease with no port is counted as a match. Leases written before the port
-// field existed have port === undefined, and an exact comparison excluded every
-// one of them — the guard failed open on precisely the population it was added
-// to protect, and killed a browser eight live sessions were using. A guard on a
-// destructive path fails CLOSED: unknown means "could be this one".
-//
-// clearLeasesForPort() treats the same undefined the opposite way, and that is
-// deliberate rather than inconsistent: there, matching means DELETING someone's
-// lease, so unknown must not match. Both readings err away from destruction.
+// Gated on a browser actually being present, because leases outlive their
+// browser by up to STALE_MS: a crashed Chrome left live leases behind and the
+// guard announced it was "Refusing to stop the Chrome on port N" for a browser
+// that was not there.
 const me = sessionId();
 const others = allLeases().filter((l) => isLive(l) && l.id !== me);
 const onThisPort = [...new Set(others.filter((l) => l.port === port).map((l) => l.id))];
 const unknownPort = [...new Set(others.filter((l) => l.port === undefined).map((l) => l.id))];
 
-if (targets.size && (onThisPort.length || unknownPort.length) && !args.force) {
+if (browserPresent && (onThisPort.length || unknownPort.length) && !args.force) {
   const lines = [
     `Refusing to stop the Chrome on port ${port}.`,
     "",
@@ -118,11 +130,23 @@ if (targets.size && (onThisPort.length || unknownPort.length) && !args.force) {
   process.exit(1);
 }
 
+// A browser is answering but lsof could not name its pid, so there is nothing to
+// signal. Say so and change nothing: deleting the state and leases here would
+// orphan every session's tab while the browser they point at keeps running.
+if (responds && !targets.size) {
+  console.error(
+    `A browser is answering on port ${port}, but its process could not be identified ` +
+      `(lsof returned nothing).\nNothing was stopped and no state was cleared — clearing it ` +
+      `would orphan the tabs of every session using that browser.\nQuit it by hand, then re-run.`,
+  );
+  process.exit(1);
+}
+
 // Kill only what actually holds the target port (`targets`, resolved above).
 //
-// State is now keyed by port, so a recorded pid that does not own its own port
-// is a genuinely stale record (a crashed Chrome, or one killed by hand) rather
-// than another session's browser. Either way it is not ours to signal.
+// State is keyed by port, so a recorded pid that does not own its own port is a
+// genuinely stale record (a crashed Chrome, or one killed by hand) rather than
+// another session's browser. Either way it is not ours to signal.
 const stalePid = state?.pid && !targets.has(state.pid) ? state.pid : null;
 
 if (stalePid) {
