@@ -1,30 +1,84 @@
 #!/usr/bin/env node
-import { connect, parseArgs } from "../lib/connect.js";
+import {
+  connect,
+  parseArgs,
+  sessionId,
+  allLeases,
+  isLive,
+} from "../lib/connect.js";
 
-const args = parseArgs(process.argv.slice(2));
+// browse-tabs enumerates EVERY tab in the browser, across every session. That was
+// harmless when one session owned the browser; with a shared profile it means the
+// indices shift under you between the `list` you read and the `close` you run, and
+// `close <index>` can take out another session's working tab.
+//
+// So: annotate ownership in `list`, and refuse to close a tab held by another
+// session's live lease unless --force. Accepting a target id as well as an index
+// gives a stable handle that a concurrent open/close cannot renumber.
+const args = parseArgs(process.argv.slice(2), { force: "bool" });
 const cmd = args._[0] ?? "list";
 
 const browser = await connect();
 
+/** targetId of a page, via the public CDP surface. */
+async function targetIdOf(page) {
+  try {
+    const cdp = await page.createCDPSession();
+    const { targetInfo } = await cdp.send("Target.getTargetInfo");
+    await cdp.detach().catch(() => {});
+    return targetInfo?.targetId ?? null;
+  } catch {
+    return null;
+  }
+}
+
 try {
   const pages = await browser.pages();
+  const ids = await Promise.all(pages.map(targetIdOf));
+
+  const me = sessionId();
+  const owners = new Map(); // targetId -> session id holding a live lease
+  for (const lease of allLeases()) {
+    if (lease.targetId && isLive(lease)) owners.set(lease.targetId, lease.id);
+  }
 
   if (cmd === "list") {
     for (let i = 0; i < pages.length; i++) {
-      const p = pages[i];
-      const title = await p.title().catch(() => "");
-      console.log(`[${i}] ${p.url()}  ${title}`);
+      const owner = owners.get(ids[i]);
+      const mark = !owner ? " " : owner === me ? "*" : "~";
+      const title = await pages[i].title().catch(() => "");
+      const short = ids[i] ? ids[i].slice(0, 8) : "--------";
+      console.log(`${mark} [${i}] ${short}  ${pages[i].url()}  ${title}`);
     }
+    console.log(`\n* = this session's tab, ~ = another session's, blank = unclaimed`);
   } else if (cmd === "close") {
-    const idx = Number(args._[1]);
-    if (Number.isNaN(idx) || !pages[idx]) {
-      console.error("Usage: browse-tabs close <index>");
+    const key = args._[1];
+    if (key === undefined) {
+      console.error("Usage: browse-tabs close <index|target-id> [--force]");
       process.exit(1);
     }
+    // A target id (or unique prefix) wins over an index: it survives renumbering.
+    let idx = ids.findIndex((id) => id && id.startsWith(key));
+    if (idx === -1 && /^\d+$/.test(key)) idx = Number(key);
+    if (!pages[idx]) {
+      console.error(`No tab matches '${key}'. Run 'browse-tabs list'.`);
+      process.exit(1);
+    }
+
+    const owner = owners.get(ids[idx]);
+    if (owner && owner !== me && !args.force) {
+      console.error(
+        `Tab [${idx}] (${ids[idx]?.slice(0, 8)}) is leased by another live session ` +
+          `('${owner}').\nClosing it would pull the page out from under that session. ` +
+          `Pass --force if you are sure.`,
+      );
+      process.exit(1);
+    }
+
     await pages[idx].close();
-    console.log(`Closed tab ${idx}`);
+    console.log(`Closed tab ${idx} (${ids[idx]?.slice(0, 8) ?? "unknown"}).`);
   } else {
-    console.error("Usage: browse-tabs [list|close <index>]");
+    console.error("Usage: browse-tabs [list | close <index|target-id> [--force]]");
     process.exit(1);
   }
 } finally {

@@ -43,9 +43,9 @@ Then `/add-dir <path-to-browse-tool>` in Claude Code so the agent can `@README.m
 
 ## How it works
 
-<img src="assets/readme/how-it-works.svg" alt="browse-start launches one long-lived Chrome (remote debugging on :9222, port recorded in $TMPDIR/browse-tool-state.json); browse-stop kills it. Every other command is a thin client that reads the state file and drives the same browser, grouped as NAVIGATE (browse-nav, browse-tabs), INSPECT (browse-eval, browse-screenshot, browse-shot, browse-pick), and EXTRACT (browse-markdown, browse-crawl)." width="100%">
+<img src="assets/readme/how-it-works.svg" alt="browse-start launches one long-lived Chrome (remote debugging on :9222, port recorded in $TMPDIR/browse-tool-state-<port>.json); browse-stop kills it. Every other command is a thin client that reads the state file for its port and drives its own leased tab in the same browser, grouped as NAVIGATE (browse-nav, browse-tabs), INSPECT (browse-eval, browse-screenshot, browse-shot, browse-pick), and EXTRACT (browse-markdown, browse-crawl)." width="100%">
 
-`browse-start` launches one long-lived Chrome with remote debugging on `:9222` and records the port in `$TMPDIR/browse-tool-state.json`. Every other command is a thin client: it reads that state file, connects to the same browser, and drives its own leased tab — so navigation, evaluation, screenshots, and scraping all share one persistent browser and one logged-in profile, while parallel sessions stay off each other's tabs. `browse-stop` kills the browser and clears the state.
+`browse-start` launches one long-lived Chrome with remote debugging on `:9222` and records it in `$TMPDIR/browse-tool-state-<port>.json`. Every other command is a thin client: it reads the state file for its port (`BROWSE_PORT`, else 9222), connects to the same browser, and drives its own leased tab — so navigation, evaluation, screenshots, and scraping all share one persistent browser and one logged-in profile, while parallel sessions stay off each other's tabs. `browse-stop` kills the browser and clears the state.
 
 ## Commands
 
@@ -69,10 +69,26 @@ Independent Claude and Codex sessions all drive **one** Chrome on one profile. E
 This matters because the old behaviour picked "whichever page looks active", and two independent processes provably selected the *same* tab — so parallel sessions silently drove each other's browser.
 
 - Cookies and logins are shared across sessions (same profile, same default context). That is the point: log in once.
-- `BROWSE_INCOGNITO=1` gives the session an isolated BrowserContext — its own cookies and storage, no second profile on disk. Verified isolated from the shared context.
+- `BROWSE_INCOGNITO=1` gives the session an isolated BrowserContext — its own cookies and storage, no second profile on disk. A session holds one lease *per isolation mode*, so flipping the flag moves between your normal tab and your incognito tab and back, keeping both. (With a single lease it silently handed back whichever tab already existed — no isolation, no warning.)
 - `BROWSE_SHARED_TAB=1` restores the old "active or first page" behaviour, for single-session use or driving a tab you opened by hand.
-- `browse-stop` clears all leases along with the browser. It stops **only what holds its target port** — `$TMPDIR/browse-tool-state.json` is a single global file, so the most recent `browse-start` anywhere on the machine overwrites it, and trusting the recorded pid meant one session could kill another session's Chrome on a different port. A recorded pid that does not own the port is reported as stale and left alone.
+- `browse-nav --new` opens a tab *and* moves this session's lease onto it, so the following `browse-eval` / `browse-screenshot` reads the page you just navigated.
+- `browse-stop` stops **only what holds its target port**, and clears only the leases pointing at that browser.
 - **`--headless`** runs without a visible window.
+
+### Ports: one browser per port, state keyed by port
+
+State lives in `$TMPDIR/browse-tool-state-<port>.json`. The port is a browser's identity everywhere in this tool — `browse-start` refuses a held port, `browse-stop` kills the port's owner — so the record is keyed the same way.
+
+A session on a non-default port must say so on every command:
+
+```bash
+browse-start --port 9223
+export BROWSE_PORT=9223   # browse-start prints this line for you
+```
+
+Why it matters: state used to be one global `browse-tool-state.json`. The most recent `browse-start` anywhere on the machine overwrote it, so `browse-stop` in one session read *another* session's port **and** pid, found that pid legitimately owning that port, and killed it — with nothing to flag, while its own Chrome survived unrecorded holding a port for the next session to trip over.
+
+Chrome permits one instance per profile. Because every session now defaults to the same `shared` profile, the usual answer to "already running" is to point `BROWSE_PORT` at the browser that exists rather than start a second one — `browse-start` detects the singleton lock and prints the port to use.
 
 **Port ownership is verified, not assumed.** `browse-start` refuses to start when
 something it does not track already holds the debugging port, and names the
@@ -129,8 +145,8 @@ Navigate to URL, strip nav/ads/boilerplate with Readability, convert the main co
 ### `browse-crawl <start-url> [--depth N] [--include prefix] [--max N] [--out dir] [--wait]`
 BFS crawl from `start-url`, following same-origin links (or links matching `--include prefix` for a narrower scope) up to `--depth` levels deep (default `1`: the start page plus its direct links), capped at `--max` pages total (default `20`). Each visited page is written as clean markdown (Readability + Turndown, same extraction as `browse-markdown`) to `--out dir` (default a fresh temp dir), plus a `manifest.json` listing `{url, title, file}` for every page. Prints each file path to stdout as it's written; prints the final page count and output dir to stderr. Visited URLs are deduped (fragment-stripped) so it never re-fetches a page.
 
-### `browse-tabs [list | close <index>]`
-List open tabs with their URL/title, or close a tab by index.
+### `browse-tabs [list | close <index|target-id> [--force]]`
+List open tabs with their URL/title, or close one. `list` shows a short target id and marks ownership: `*` this session's tab, `~` another session's, blank unclaimed. `close` accepts a target id (or unique prefix) as well as an index — the id is stable, whereas indices renumber when any session opens or closes a tab between your `list` and your `close`. Closing a tab held by another live session is refused unless you pass `--force`.
 
 ### `browse-pick`
 Enable an interactive element picker in the active tab. Hover highlights elements, click to pick, Cmd/Ctrl+click to add multiple, Enter to finish, Esc to cancel. Returns JSON with tag, id, class, text, html, bounding rect, and a heuristic selector for each picked element. Use this when you need the human to point at something instead of guessing at selectors.
@@ -174,7 +190,8 @@ cat /tmp/docs-crawl/manifest.json
 
 ## State & troubleshooting
 
-- State file: `$TMPDIR/browse-tool-state.json`
+- State file: `$TMPDIR/browse-tool-state-<port>.json` (port from `BROWSE_PORT`, else 9222)
+- Tab leases: `~/.browse-tool/leases/<session>.json`, plus `<session>.incognito.json` when `BROWSE_INCOGNITO=1`
 - If `browse-nav` says "Cannot connect", run `browse-start`.
 - If Chrome is already open with your real profile, quit it first or pick a different `--port`. browse-tool always launches into a temp `--user-data-dir`, so it will never touch your real profile directly.
 - Override Chrome path with `CHROME_PATH=/path/to/chrome`.

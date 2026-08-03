@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 import { spawn, execSync } from "node:child_process";
-import { mkdirSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, readdirSync, readlinkSync } from "node:fs";
 import { platform, homedir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
   DEFAULT_PORT,
-  STATE_FILE,
+  resolvePort,
+  stateFile,
   parseArgs,
   readState,
   portOwners,
+  portsOf,
   profileOf,
 } from "../lib/connect.js";
 import { liveLeaseCount } from "../lib/session.js";
@@ -19,7 +21,8 @@ const args = parseArgs(process.argv.slice(2), {
   headless: "bool",
   reseed: "bool",
 });
-const port = Number(args.port ?? DEFAULT_PORT);
+const port = resolvePort(args.port);
+const STATE_FILE = stateFile(port);
 // One shared profile by default.
 //
 // This used to default to basename(process.cwd()), which silently made the
@@ -42,7 +45,7 @@ const profileName =
 // while this script reports success, so check ownership before taking the
 // already-running shortcut and before binding a fresh Chrome to a held port.
 const owners = portOwners(port);
-const existing = readState();
+const existing = readState(port);
 if (existing?.pid && owners.includes(existing.pid)) {
   console.log(`Chrome already running (pid ${existing.pid}, port ${existing.port}).`);
   process.exit(0);
@@ -90,6 +93,40 @@ const profileIsEmpty = () => {
     return true;
   }
 };
+
+// Chrome allows exactly one instance per --user-data-dir and enforces it with a
+// SingletonLock symlink named <host>-<pid>. Now that every session defaults to
+// ONE shared profile, "someone already has it" is the routine collision, not an
+// edge case — and Chrome's own response is to exit silently, which surfaced here
+// as a bare "Chrome did not become ready on port N" after a 6-second wait. Name
+// the holder and its port instead: the answer is almost always to use the browser
+// that is already running, not to start a second one.
+const singletonHolder = () => {
+  try {
+    const link = readlinkSync(join(userDataDir, "SingletonLock"));
+    const pid = Number(link.split("-").pop());
+    if (!Number.isInteger(pid) || pid <= 0) return null;
+    process.kill(pid, 0); // throws ESRCH when the lock is stale
+    return pid;
+  } catch {
+    return null;
+  }
+};
+
+const holder = singletonHolder();
+if (holder) {
+  const heldPorts = [...new Set(portsOf(holder))];
+  console.error(
+    `Profile '${profileName}' is already open in Chrome (pid ${holder}` +
+      `${heldPorts.length ? `, debugging port ${heldPorts.join(", ")}` : ""}).\n` +
+      `Chrome permits one instance per profile, so a second one exits immediately.\n\n` +
+      (heldPorts.length
+        ? `Use the running browser instead:  export BROWSE_PORT=${heldPorts[0]}\n` +
+          `Or stop it first:                 browse-stop --port ${heldPorts[0]}`
+        : `Stop it first, or pass --profile-name <name> for a separate profile.`),
+  );
+  process.exit(1);
+}
 
 // Seeding rsyncs your real Chrome profile over this one. On the SHARED profile
 // that rewrites the identity every other live session is currently using, so a
@@ -175,6 +212,15 @@ for (let i = 0; i < 40; i++) {
       console.log(`  Browser: ${info.Browser}`);
       console.log(`  Profile: ${userDataDir}`);
       console.log(`  State:   ${STATE_FILE}`);
+      // State is keyed by port, so a non-default port is not discoverable by the
+      // other commands — they would silently address 9222 instead. Say so here
+      // rather than letting the next browse-nav fail somewhere else.
+      if (port !== DEFAULT_PORT) {
+        console.log(
+          `\n  This is not the default port. Every other browse-* command in this\n` +
+            `  session needs to be told:  export BROWSE_PORT=${port}`,
+        );
+      }
       process.exit(0);
     }
   } catch {}

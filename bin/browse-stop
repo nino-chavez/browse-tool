@@ -2,12 +2,13 @@
 import { unlinkSync, existsSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
-  STATE_FILE,
-  DEFAULT_PORT,
+  stateFile,
+  resolvePort,
+  parseArgs,
   readState,
   portOwners,
   profileOf,
-  clearAllLeases,
+  clearLeasesForPort,
 } from "../lib/connect.js";
 
 // Stop whatever actually holds the debugging port, not merely the pid we happen
@@ -26,24 +27,28 @@ async function waitForPortRelease(port, graceMs) {
   return owners;
 }
 
-const state = readState();
-const port = state?.port ?? DEFAULT_PORT;
+// The port comes from --port / BROWSE_PORT, never from a file another session
+// can overwrite. Reading it from shared state was the other half of the
+// cross-session kill: session A would read session B's port, find B's pid as its
+// legitimate owner, and SIGTERM it with nothing to flag — while A's own Chrome
+// survived, unrecorded, holding a port for the next session to trip over.
+const args = parseArgs(process.argv.slice(2));
+const port = resolvePort(args.port);
+const STATE_FILE = stateFile(port);
+const state = readState(port);
 
 // Kill only what actually holds the target port.
 //
-// This used to be portOwners(port) ∪ {state.pid}, which is unsafe now that
-// sessions run concurrently: STATE_FILE is a single global file in $TMPDIR, so
-// the most recent browse-start anywhere on the machine overwrites it. A
-// browse-stop in session A would then read session B's pid and kill B's browser
-// — observed, on a Chrome bound to an entirely different port. A pid that does
-// not own this port is not ours to signal; report it as stale and drop it.
+// State is now keyed by port, so a recorded pid that does not own its own port
+// is a genuinely stale record (a crashed Chrome, or one killed by hand) rather
+// than another session's browser. Either way it is not ours to signal.
 const targets = new Set(portOwners(port));
 const stalePid = state?.pid && !targets.has(state.pid) ? state.pid : null;
 
 if (stalePid) {
   console.log(
     `Ignoring recorded pid ${stalePid} (profile: ${profileOf(stalePid)}): it does not hold ` +
-      `port ${port}, so it belongs to another session. Clearing stale state only.`,
+      `port ${port}. Clearing stale state only.`,
   );
 }
 
@@ -68,8 +73,13 @@ if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
 
 // Tab leases point at targets inside the Chrome we just killed. Left behind,
 // the next session would spend a lookup miss on every command before falling
-// through to a fresh tab. Stopping the browser ends every session's claim on it.
-clearAllLeases();
+// through to a fresh tab.
+//
+// Scoped to this port: clearing every lease on the machine would orphan the tabs
+// of sessions driving a different browser entirely, including on the path where
+// there was nothing to stop in the first place.
+const cleared = clearLeasesForPort(port);
+if (cleared) console.log(`Cleared ${cleared} tab lease(s) for port ${port}.`);
 
 // Report anything still holding the port, so a failure is visible now rather
 // than as mysterious wrong-browser behaviour later.
