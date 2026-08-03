@@ -88,11 +88,11 @@ export BROWSE_PORT=9223   # browse-start prints this line for you
 
 Why it matters: state used to be one global `browse-tool-state.json`. The most recent `browse-start` anywhere on the machine overwrote it, so `browse-stop` in one session read *another* session's port **and** pid, found that pid legitimately owning that port, and killed it — with nothing to flag, while its own Chrome survived unrecorded holding a port for the next session to trip over.
 
-A `BROWSE_PORT` or `--port` that does not parse is a hard error, never a fallback to 9222 — the default port is a browser other sessions may be using, so silently redirecting a typo there is the worst available response. (`--port` with no value is rejected too: it arrives as boolean `true`, and `Number(true)` is a perfectly valid-looking `1`.)
+A `BROWSE_PORT` or `--port` that does not parse is a hard error, never a fallback to 9222 — the default port is a browser other sessions may be using, so silently redirecting a typo there is the worst available response. `--port` with no value is rejected too: it arrives as boolean `true`, and `Number(true)` is a perfectly valid-looking `1`. `--port=9223` and `--port 9223` are equivalent; an exported-but-empty `BROWSE_PORT=` reads as absent, while `--port=` is an error.
 
 Chrome permits one instance per profile. Because every session now defaults to the same `shared` profile, the usual answer to "already running" is to use the browser that exists rather than start a second one:
 
-- If the port is held by a Chrome running **the profile you asked for**, `browse-start` adopts it — records it in state and exits 0. Leaving it unrecorded would strand a live browser with no state entry, which silently disables the wrong-browser check (it fails open on a null state).
+- If the port is held by a Chrome running **the profile you asked for**, `browse-start` adopts it — records it in state and exits 0. Leaving it unrecorded would strand a live browser with no state entry, which silently disables the wrong-browser check (it fails open on a null state). Adoption matches on profile, not mode, so it says so when the running browser is headless and you asked for headed (or the reverse). `--reseed` cannot be satisfied by adoption and is refused with a non-zero exit rather than reported as done.
 - If the port is held by a **different** profile, it refuses and names the squatter.
 - If the profile is open but on another port, it reads Chrome's `SingletonLock`, names the holding pid, and prints the `BROWSE_PORT` to use.
 

@@ -62,8 +62,23 @@ if (owners.length) {
   // actively harmful — it strands a live Chrome with no state record, which
   // silently disables assertPortIdentity (it fails open on a null state), losing
   // the wrong-browser check for every later command. Recording it restores that.
-  const adopted = owners.find((p) => profileOf(p).replace(/ \[headless\]$/, "") === profileName);
+  const describe = (p) => profileOf(p); // "<profile>" or "<profile> [headless]"
+  const adopted = owners.find((p) => describe(p).replace(/ \[headless\]$/, "") === profileName);
   if (adopted) {
+    // Adoption cannot satisfy --reseed, and must not report success as if it
+    // had. Reseeding rsyncs --delete over Default/, which is precisely what the
+    // guard below refuses to do beneath a running Chrome — so skipping the rsync
+    // is right, and exiting 0 with "Adopted it" while the requested reseed
+    // silently did not happen is the defect. Say what did not happen.
+    if (args.reseed) {
+      console.error(
+        `Cannot reseed profile '${profileName}': it is open in a running Chrome ` +
+          `(pid ${adopted}, port ${port}).\n` +
+          `Reseeding rsyncs --delete over Default/ and would change identity underneath it.\n` +
+          `Stop that browser first (browse-stop --port ${port}), then retry.`,
+      );
+      process.exit(1);
+    }
     writeFileSync(
       STATE_FILE,
       JSON.stringify(
@@ -72,9 +87,18 @@ if (owners.length) {
         2,
       ),
     );
+    // Mode is not part of the adoption match — the profile is the identity — so
+    // an adopted browser may not be headless/headed the way this call asked.
+    // Flag the mismatch rather than let a --headless request appear honoured.
+    const adoptedHeadless = / \[headless\]$/.test(describe(adopted));
+    const modeNote =
+      Boolean(args.headless) === adoptedHeadless
+        ? ""
+        : `\nNote: it is running ${adoptedHeadless ? "HEADLESS" : "HEADED"}, not ` +
+          `${args.headless ? "headless" : "headed"} as this call asked. Stop it first to change mode.`;
     console.log(
       `Chrome already running on port ${port} with profile '${profileName}' (pid ${adopted}).\n` +
-        `Adopted it — no second browser started.`,
+        `Adopted it — no second browser started.${modeNote}`,
     );
     process.exit(0);
   }

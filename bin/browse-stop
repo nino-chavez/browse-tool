@@ -60,12 +60,29 @@ const state = readState(port);
 // clearLeasesForPort() treats the same undefined the opposite way, and that is
 // deliberate rather than inconsistent: there, matching means DELETING someone's
 // lease, so unknown must not match. Both readings err away from destruction.
+//
+// Gated on something actually listening. Leases outlive the browser by up to
+// STALE_MS, so a crashed Chrome left live leases behind and the guard announced
+// it was "Refusing to stop the Chrome on port N" for a browser that was not
+// there — the same dressing-a-guess-as-fact the note below warns against. With
+// nothing listening there is nothing to protect: fall through and clean up.
+const targets = new Set(portOwners(port));
+
+// A lease with no port is counted as a match. Leases written before the port
+// field existed have port === undefined, and an exact comparison excluded every
+// one of them — the guard failed open on precisely the population it was added
+// to protect, and killed a browser eight live sessions were using. A guard on a
+// destructive path fails CLOSED: unknown means "could be this one".
+//
+// clearLeasesForPort() treats the same undefined the opposite way, and that is
+// deliberate rather than inconsistent: there, matching means DELETING someone's
+// lease, so unknown must not match. Both readings err away from destruction.
 const me = sessionId();
 const others = allLeases().filter((l) => isLive(l) && l.id !== me);
 const onThisPort = [...new Set(others.filter((l) => l.port === port).map((l) => l.id))];
 const unknownPort = [...new Set(others.filter((l) => l.port === undefined).map((l) => l.id))];
 
-if ((onThisPort.length || unknownPort.length) && !args.force) {
+if (targets.size && (onThisPort.length || unknownPort.length) && !args.force) {
   const lines = [
     `Refusing to stop the Chrome on port ${port}.`,
     "",
@@ -86,17 +103,26 @@ if ((onThisPort.length || unknownPort.length) && !args.force) {
     "",
     `Stopping it would close their tabs and clear their leases. Leave it running — a`,
     `shared browser is meant to outlive any one session. Pass --force if you are sure.`,
+    // Without a harness id, sessionId() falls back to ppid, so the same person
+    // in two shells reads their own lease as a stranger's. Name the way out.
+    ...(me.startsWith("ppid-")
+      ? [
+          "",
+          `This session has no harness id and is identified as '${me}' (parent pid). If one`,
+          `of those leases is your own from another shell, set BROWSE_SESSION to a stable`,
+          `name in both so they are recognised as the same session.`,
+        ]
+      : []),
   ];
   console.error(lines.join("\n"));
   process.exit(1);
 }
 
-// Kill only what actually holds the target port.
+// Kill only what actually holds the target port (`targets`, resolved above).
 //
 // State is now keyed by port, so a recorded pid that does not own its own port
 // is a genuinely stale record (a crashed Chrome, or one killed by hand) rather
 // than another session's browser. Either way it is not ours to signal.
-const targets = new Set(portOwners(port));
 const stalePid = state?.pid && !targets.has(state.pid) ? state.pid : null;
 
 if (stalePid) {
