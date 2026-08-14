@@ -51,7 +51,10 @@ Then `/add-dir <path-to-browse-tool>` in Claude Code so the agent can `@README.m
 
 Every command below connects to the Chrome that `browse-start` launched (see [How it works](#how-it-works)).
 
-### `browse-start [--profile] [--profile-name <name>] [--reseed] [--headless] [--port 9222]`
+### browse-start
+
+    browse-start [--profile] [--profile-name <name>] [--reseed] [--headless] [--port 9222]
+
 Launch Chrome with remote debugging. Profiles live persistently under `~/.browse-tool/profiles/<name>` so your logged-in state survives between sessions.
 
 - **Default profile is `shared`** — one profile for every session, on every project. Override with `--profile-name foo` or `BROWSE_PROFILE=foo`.
@@ -115,7 +118,10 @@ against the orphan and succeeded. On 2026-08-02 that produced four false
 "logged out" readings and cost an 8.4 GB profile clone deleted on a false
 negative. A silent wrong-browser failure is worse than a loud refusal.
 
-### `browse-stop [--port <n>] [--force]`
+### browse-stop
+
+    browse-stop [--port <n>] [--force]
+
 Kill whatever holds the debugging port, then clear the state and the leases for
 that browser. Exits non-zero if anything is still listening afterwards. Killing
 only the tracked pid is how orphans accumulated. The kill failed with `ESRCH`,
@@ -157,13 +163,24 @@ If a browser answers but no owning process can be identified, nothing is stopped
 and the run exits non-zero. `--force` does not help there — it overrides the
 live-session guard, not the absence of a pid to signal.
 
-### `browse-nav <url> [--new] [--wait]`
+### browse-nav
+
+    browse-nav <url> [--new] [--wait]
+
 Navigate the active tab (or a new one with `--new`). `https://` is auto-prepended if the URL has no scheme. `--wait` waits for `networkidle2` instead of `domcontentloaded`. Prints final URL and title.
 
-### `browse-tabs [list | close <index|target-id> [--force]]`
+### browse-tabs
+
+    browse-tabs [list | close <index|target-id> [--force]]
+
 List open tabs with their URL/title, or close one. `list` shows a short target id and marks ownership: `*` this session's tab, `~` another session's, blank unclaimed. `close` accepts a target id (or unique prefix) as well as an index. Prefer the id: it is stable, whereas indices renumber when any session opens or closes a tab between your `list` and your `close`. Closing a tab held by another live session is refused unless you pass `--force`.
 
-### `browse-eval '<js>'` | `browse-eval --file script.js` | `echo '…' | browse-eval --stdin`
+### browse-eval
+
+    browse-eval '<js>'
+    browse-eval --file script.js
+    echo '<js>' | browse-eval --stdin
+
 Run JavaScript in the active page. Code is wrapped in `async () => { … }`, so use `return` for a value and `await` freely. Result is JSON-serialized to stdout. Prefer writing scripts to files for anything non-trivial.
 
 Examples:
@@ -173,19 +190,40 @@ browse-eval 'return [...document.querySelectorAll("h2")].map(h => h.innerText)'
 browse-eval 'const r = await fetch("/api/me"); return r.status'
 ```
 
-### `browse-screenshot [--full] [--out path.png]`
+### browse-screenshot
+
+    browse-screenshot [--full] [--out path.png]
+
 Capture the viewport (or full page with `--full`) as PNG. Prints the path so you can `Read` it.
 
-### `browse-shot <url> [--out path.png] [--full] [--wait] [--wait-ms <n>] [--wait-for <selector>]`
+### browse-shot
+
+    browse-shot <url> [--out path.png] [--full] [--wait] [--wait-ms <n>] [--wait-for <selector>]
+
 Navigate to URL, wait for readiness, optionally wait for a selector or additional time, then screenshot in one command. Replaces the `browse-nav && sleep N && browse-screenshot` pattern. Prints the output path.
 
-### `browse-markdown <url> [--wait] [--wait-ms <n>] [--wait-for <selector>] [--raw]`
+### browse-markdown
+
+    browse-markdown <url> [--wait] [--wait-ms <n>] [--wait-for <selector>] [--raw]
+
 Navigate to URL, strip nav/ads/boilerplate with Readability, convert the main content to markdown with Turndown. Prints `# title` + markdown body to stdout. Falls back to the full page body if Readability finds no article-shaped content (dashboards, SPAs, listings). `--raw` skips Readability entirely and always converts the full body. For clean, LLM-ready text from an article/blog/docs page, use this instead of `browse-eval 'return document.body.innerText'`.
 
-### `browse-crawl <start-url> [--depth N] [--include prefix] [--max N] [--out dir] [--wait]`
-BFS crawl from `start-url`, following same-origin links up to `--depth` levels deep, capped at `--max` pages total (default `20`). `--include prefix` narrows which links are followed. Default depth is `1`: the start page plus its direct links. Each visited page is written as clean markdown (Readability + Turndown, same extraction as `browse-markdown`) to `--out dir` (default a fresh temp dir). A `manifest.json` lists `{url, title, file}` for every page. Prints each file path to stdout as it's written, and the final page count and output dir to stderr. Visited URLs are deduped (fragment-stripped) so it never re-fetches a page.
+### browse-crawl
 
-### `browse-events [<Domain.event> | '<Domain.*>' ...] [--console] [--network] [--duration <sec>] [--count <n>] [--out <file>]`
+    browse-crawl <start-url> [--depth N] [--include prefix] [--max N] [--out dir] [--wait]
+
+BFS crawl from `start-url`, writing each visited page as clean markdown (Readability + Turndown, same extraction as `browse-markdown`).
+
+- Follows same-origin links; `--include prefix` narrows which links are followed.
+- `--depth` (default `1`): the start page plus its direct links. `--max` (default `20`) caps total pages.
+- `--out dir` (default a fresh temp dir) receives one markdown file per page, plus a `manifest.json` listing `{url, title, file}` for every page.
+- Prints each file path to stdout as it's written; the final page count and output dir go to stderr.
+- Visited URLs are deduped (fragment-stripped) so it never re-fetches a page.
+
+### browse-events
+
+    browse-events [<Domain.event> | '<Domain.*>' ...] [--console] [--network] [--duration <sec>] [--count <n>] [--out <file>]
+
 Stream Chrome DevTools Protocol events from this session's tab as JSON lines (`{ts, event, params}`), one per line, to stdout or appended to `--out`. Use it to watch what a page actually does — console output, failing requests, navigation — while other commands (or a human) drive it.
 
 - **`--console`** subscribes to `Runtime.consoleAPICalled`, `Runtime.exceptionThrown`, `Log.entryAdded`. **`--network`** to `Network.requestWillBeSent`, `Network.responseReceived`, `Network.loadingFailed`. With no events named you get both presets.
@@ -199,7 +237,10 @@ browse-eval 'document.querySelector("#checkout").click()'
 wait; grep loadingFailed /tmp/net.jsonl
 ```
 
-### `browse-cdp <Domain.method> ['<json-params>'] [--browser]`
+### browse-cdp
+
+    browse-cdp <Domain.method> ['<json-params>'] [--browser]
+
 Raw CDP passthrough: send any protocol method to this session's tab and print the JSON result. The escape hatch for anything the task-level commands don't cover — including methods Chrome shipped after this tool was written. `--browser` targets the browser instead of the tab (for `Target.*`, `Browser.*`, `SystemInfo.*`).
 
 ```bash
@@ -210,7 +251,8 @@ browse-cdp Browser.getVersion --browser
 
 Prefer the task commands when one fits — `browse-eval` over `Runtime.evaluate`, `browse-screenshot` over `Page.captureScreenshot` (which dumps base64 to stdout). They cost fewer tokens per call and handle output sensibly.
 
-### `browse-pick`
+### browse-pick
+
 Enable an interactive element picker in the active tab. Hover highlights elements, click to pick, Cmd/Ctrl+click to add multiple, Enter to finish, Esc to cancel. Returns JSON with tag, id, class, text, html, bounding rect, and a heuristic selector for each picked element. Use this when you need the human to point at something instead of guessing at selectors.
 
 ## Recipes
