@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 460" width="100%" role="img" aria-label="Architecture: browse-start launches one long-lived Chrome with remote debugging on port 9222, recorded in a TMPDIR state file. browse-stop kills it. Every other command — grouped as NAVIGATE (browse-nav, browse-tabs), INSPECT (browse-eval, browse-screenshot, browse-shot, browse-pick), and EXTRACT (browse-markdown, browse-crawl) — is a thin client that connects to that same browser and drives the page.">
-  <title>browse-tool architecture — one persistent Chrome, every command a thin client that connects through a shared state file</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 460" width="100%" role="img" aria-label="Architecture: browse-start launches one long-lived Chrome with remote debugging on port 9222, recorded in a per-port state file under TMPDIR; browse-stop kills it. Every other command is a thin client that connects to that browser and drives its own session's leased tab, grouped as NAVIGATE (browse-nav, browse-tabs), INSPECT (browse-eval, browse-screenshot, browse-shot, browse-pick), EXTRACT (browse-markdown, browse-crawl), and OBSERVE (browse-events, browse-cdp).">
+  <title>browse-tool architecture — one persistent Chrome; every command a thin client driving its session's leased tab</title>
 
   <rect x="8" y="8" width="1184" height="444" rx="14" fill="#0d1117" stroke="#30363d" stroke-width="1.5"/>
 
@@ -23,39 +23,47 @@
   <text x="450" y="212" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="24" font-weight="600" fill="#c9d1d9">Chrome</text>
   <text x="450" y="240" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#8b949e">one long-lived process</text>
   <text x="450" y="262" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#8b949e">remote debugging · :9222</text>
-  <rect x="342" y="322" width="216" height="30" rx="15" fill="#161b22" stroke="#30363d"/>
-  <text x="450" y="342" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11.5" fill="#6e7681">$TMPDIR/browse-tool-state.json</text>
+  <rect x="320" y="322" width="260" height="30" rx="15" fill="#161b22" stroke="#30363d"/>
+  <text x="450" y="342" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" fill="#6e7681">$TMPDIR/browse-tool-state-&lt;port&gt;.json</text>
 
   <!-- chrome -> clients bus -->
   <polyline points="570,225 600,225 600,95" fill="none" stroke="#3fb950" stroke-width="1.5"/>
-  <line x1="600" y1="95" x2="1102" y2="95" stroke="#3fb950" stroke-width="1.5"/>
-  <text x="851" y="80" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#6e7681">shared session · every client connects via :9222 + the state file</text>
+  <line x1="600" y1="95" x2="1117" y2="95" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="858" y="80" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#6e7681">each command connects via :9222 · drives its session's leased tab</text>
 
   <!-- NAVIGATE -->
-  <line x1="703" y1="95" x2="703" y2="112" stroke="#30363d" stroke-width="1.5"/>
-  <text x="703" y="130" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" letter-spacing="1.5" fill="#8b949e">NAVIGATE</text>
-  <rect x="628" y="142" width="150" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
-  <text x="703" y="164" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#c9d1d9">browse-nav</text>
-  <rect x="628" y="184" width="150" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
-  <text x="703" y="206" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#c9d1d9">browse-tabs</text>
+  <line x1="673" y1="95" x2="673" y2="112" stroke="#30363d" stroke-width="1.5"/>
+  <text x="673" y="130" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" letter-spacing="1.5" fill="#8b949e">NAVIGATE</text>
+  <rect x="604" y="142" width="138" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
+  <text x="673" y="164" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#c9d1d9">browse-nav</text>
+  <rect x="604" y="184" width="138" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
+  <text x="673" y="206" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#c9d1d9">browse-tabs</text>
 
   <!-- INSPECT -->
-  <line x1="865" y1="95" x2="865" y2="112" stroke="#30363d" stroke-width="1.5"/>
-  <text x="865" y="130" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" letter-spacing="1.5" fill="#8b949e">INSPECT</text>
-  <rect x="790" y="142" width="150" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
-  <text x="865" y="164" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#c9d1d9">browse-eval</text>
-  <rect x="790" y="184" width="150" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
-  <text x="865" y="206" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#c9d1d9">browse-screenshot</text>
-  <rect x="790" y="226" width="150" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
-  <text x="865" y="248" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#c9d1d9">browse-shot</text>
-  <rect x="790" y="268" width="150" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
-  <text x="865" y="290" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#c9d1d9">browse-pick</text>
+  <line x1="821" y1="95" x2="821" y2="112" stroke="#30363d" stroke-width="1.5"/>
+  <text x="821" y="130" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" letter-spacing="1.5" fill="#8b949e">INSPECT</text>
+  <rect x="752" y="142" width="138" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
+  <text x="821" y="164" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#c9d1d9">browse-eval</text>
+  <rect x="752" y="184" width="138" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
+  <text x="821" y="206" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#c9d1d9">browse-screenshot</text>
+  <rect x="752" y="226" width="138" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
+  <text x="821" y="248" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#c9d1d9">browse-shot</text>
+  <rect x="752" y="268" width="138" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
+  <text x="821" y="290" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#c9d1d9">browse-pick</text>
 
   <!-- EXTRACT -->
-  <line x1="1027" y1="95" x2="1027" y2="112" stroke="#30363d" stroke-width="1.5"/>
-  <text x="1027" y="130" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" letter-spacing="1.5" fill="#8b949e">EXTRACT</text>
-  <rect x="952" y="142" width="150" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
-  <text x="1027" y="164" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#c9d1d9">browse-markdown</text>
-  <rect x="952" y="184" width="150" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
-  <text x="1027" y="206" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#c9d1d9">browse-crawl</text>
+  <line x1="969" y1="95" x2="969" y2="112" stroke="#30363d" stroke-width="1.5"/>
+  <text x="969" y="130" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" letter-spacing="1.5" fill="#8b949e">EXTRACT</text>
+  <rect x="900" y="142" width="138" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
+  <text x="969" y="164" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#c9d1d9">browse-markdown</text>
+  <rect x="900" y="184" width="138" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
+  <text x="969" y="206" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#c9d1d9">browse-crawl</text>
+
+  <!-- OBSERVE -->
+  <line x1="1117" y1="95" x2="1117" y2="112" stroke="#30363d" stroke-width="1.5"/>
+  <text x="1117" y="130" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" letter-spacing="1.5" fill="#8b949e">OBSERVE</text>
+  <rect x="1048" y="142" width="138" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
+  <text x="1117" y="164" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#c9d1d9">browse-events</text>
+  <rect x="1048" y="184" width="138" height="34" rx="6" fill="#161b22" stroke="#30363d"/>
+  <text x="1117" y="206" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#c9d1d9">browse-cdp</text>
 </svg>

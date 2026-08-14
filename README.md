@@ -1,8 +1,8 @@
 # browse-tool
 
-<img src="assets/readme/hero.svg" alt="browse-tool: a coding agent drives Chrome from bash — browse-start, browse-nav, browse-eval returning &quot;Hacker News&quot; — described in a few hundred tokens versus the 13.7k (Playwright MCP) and 18.0k (Chrome DevTools MCP) an equivalent MCP loads up front." width="100%">
+<img src="assets/readme/hero.svg" alt="browse-tool: a coding agent drives Chrome from bash — browse-start, browse-nav, browse-eval returning &quot;Hacker News&quot; — costing zero context up front, versus the 13.7k (Playwright MCP) and 18.0k (Chrome DevTools MCP) an equivalent MCP loads in every session." width="100%">
 
-Minimal Bash-invokable browser tools for coding agents. Twelve small CLI scripts drive a real Chrome — navigate, run JS, screenshot, scrape to markdown, crawl, stream CDP events — described in a few hundred tokens instead of the 13–18k an equivalent MCP loads up front. Agents lean on standard DOM/JS knowledge instead of memorizing tool schemas.
+Minimal Bash-invokable browser tools for coding agents. Twelve small CLI scripts drive a real Chrome — navigate, run JS, screenshot, scrape to markdown, crawl, stream CDP events. An MCP equivalent loads 13–18k tokens of schema in every session. These commands cost nothing until browser work starts, and then the agent reads a couple hundred tokens for the command it needs. Agents lean on standard DOM/JS knowledge instead of memorizing tool schemas.
 
 Inspired by Mario Zechner's [What if you don't need MCP at all?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/).
 
@@ -10,7 +10,7 @@ Inspired by Mario Zechner's [What if you don't need MCP at all?](https://marioze
 
 - Playwright MCP ≈ 13.7k tokens of tool schema, always loaded.
 - Chrome DevTools MCP ≈ 18.0k tokens.
-- browse-tool ≈ a few hundred tokens, loaded only when the agent reads this README.
+- browse-tool: zero tokens up front. This README (≈5k tokens total) is read on demand, and usually only the entry for the command at hand.
 - Outputs pipe, save, and compose with ordinary shell tools.
 - Adding a command is a single file — no protocol, no rebuild, no restart.
 
@@ -43,9 +43,9 @@ Then `/add-dir <path-to-browse-tool>` in Claude Code so the agent can `@README.m
 
 ## How it works
 
-<img src="assets/readme/how-it-works.svg" alt="browse-start launches one long-lived Chrome (remote debugging on :9222, port recorded in $TMPDIR/browse-tool-state-<port>.json); browse-stop kills it. Every other command is a thin client that reads the state file for its port and drives its own leased tab in the same browser, grouped as NAVIGATE (browse-nav, browse-tabs), INSPECT (browse-eval, browse-screenshot, browse-shot, browse-pick), and EXTRACT (browse-markdown, browse-crawl)." width="100%">
+<img src="assets/readme/how-it-works.svg" alt="browse-start launches one long-lived Chrome (remote debugging on :9222, recorded in a per-port state file under TMPDIR); browse-stop kills it. Every other command is a thin client that reads the state file for its port and drives its own leased tab in the same browser, grouped as NAVIGATE (browse-nav, browse-tabs), INSPECT (browse-eval, browse-screenshot, browse-shot, browse-pick), EXTRACT (browse-markdown, browse-crawl), and OBSERVE (browse-events, browse-cdp)." width="100%">
 
-`browse-start` launches one long-lived Chrome with remote debugging on `:9222` and records it in `$TMPDIR/browse-tool-state-<port>.json`. Every other command is a thin client: it reads the state file for its port (`BROWSE_PORT`, else 9222), connects to the same browser, and drives its own leased tab — so navigation, evaluation, screenshots, and scraping all share one persistent browser and one logged-in profile, while parallel sessions stay off each other's tabs. `browse-stop` kills the browser and clears the state.
+`browse-start` launches one long-lived Chrome with remote debugging on `:9222` and records it in `$TMPDIR/browse-tool-state-<port>.json`. Every other command is a thin client: it reads the state file for its port (`BROWSE_PORT`, else 9222), connects to the same browser, and drives its own leased tab. Navigation, evaluation, screenshots, scraping, and event streams all share one persistent browser and one logged-in profile, while parallel sessions stay off each other's tabs. `browse-stop` kills the browser and clears the state.
 
 ## Commands
 
@@ -56,15 +56,17 @@ Launch Chrome with remote debugging. Profiles live persistently under `~/.browse
 
 - **Default profile is `shared`** — one profile for every session, on every project. Override with `--profile-name foo` or `BROWSE_PROFILE=foo`.
 
-  This used to default to the basename of the current working directory, which silently turned "where you happened to be" into an identity: every repo, worktree and audit scratch dir minted its own Chrome profile. That reached 102 profiles / 74 GB, five of which had each separately downloaded the same 4 GB on-device model. Sessions now share one browser and isolate at the **tab** level instead (see *Parallel sessions* below), so logging into a site once covers every project.
+  This used to default to the basename of the current working directory, which silently turned "where you happened to be" into an identity. Every repo, worktree and audit scratch dir minted its own Chrome profile. That reached 102 profiles / 74 GB, five of which had each separately downloaded the same 4 GB on-device model. Sessions now share one browser and isolate at the **tab** level instead (see *Parallel sessions* below), so logging into a site once covers every project.
 
   **A separate profile is only warranted for simultaneous distinct authenticated identities on the same origin** — e.g. an admin account and a member account you need signed in at once. For a merely logged-out view, use `BROWSE_INCOGNITO=1` instead; it isolates cookies in a BrowserContext without a second profile on disk.
 - **`--profile`** on first run rsyncs your real Chrome default profile (cookies, logins, extensions) into the target directory — **only when the target is empty**. Your real Chrome profile is never modified. On subsequent runs the flag is a no-op; the persistent profile is reused as-is.
 - **`--reseed`** forces a fresh rsync over an existing profile (useful after you log into a new account in real Chrome). Refused on the `shared` profile while other sessions hold live tab leases — reseeding rewrites `Default/` and would change identity underneath them.
+- **`--headless`** runs without a visible window.
+- **`--profile` cannot transplant a logged-in Facebook session.** Cookies copy fine, but `c_user`/`xs` are bound to the originating profile and Chrome drops them; only `datr` survives. Log into the automation profile directly instead. Chrome 136+ likewise refuses `--remote-debugging-port` on your real default profile, so driving your everyday browser is not an option either.
 
 ### Parallel sessions
 
-Independent Claude and Codex sessions all drive **one** Chrome on one profile. Each session gets its own tab, leased by session id (`CLAUDE_CODE_SESSION_ID` / `CODEX_COMPANION_SESSION_ID`, else `BROWSE_SESSION`, else the parent pid). Leases are one file per session under `~/.browse-tool/leases/` — deliberately not the shared state file, since every `browse-*` command is a separate process and concurrent writes to one JSON would be a race.
+Independent Claude and Codex sessions all drive **one** Chrome on one profile. Each session gets its own tab, leased by session id (`CLAUDE_CODE_SESSION_ID` / `CODEX_COMPANION_SESSION_ID`, else `BROWSE_SESSION`, else the parent pid). Leases are one file per session under `~/.browse-tool/leases/` — deliberately not the shared state file. Every `browse-*` command is a separate process, and concurrent writes to one JSON would be a race.
 
 This matters because the old behaviour picked "whichever page looks active", and two independent processes provably selected the *same* tab — so parallel sessions silently drove each other's browser.
 
@@ -73,7 +75,6 @@ This matters because the old behaviour picked "whichever page looks active", and
 - `BROWSE_SHARED_TAB=1` restores the old "active or first page" behaviour, for single-session use or driving a tab you opened by hand.
 - `browse-nav --new` opens a tab *and* moves this session's lease onto it, so the following `browse-eval` / `browse-screenshot` reads the page you just navigated.
 - `browse-stop` stops **only what holds its target port**, and clears only the leases pointing at that browser.
-- **`--headless`** runs without a visible window.
 
 ### Ports: one browser per port, state keyed by port
 
@@ -89,43 +90,35 @@ export BROWSE_PORT=9223   # browse-start prints this line for you
 browse-nav --port 9223 example.com   # or per-command
 ```
 
-Why it matters: state used to be one global `browse-tool-state.json`. The most recent `browse-start` anywhere on the machine overwrote it, so `browse-stop` in one session read *another* session's port **and** pid, found that pid legitimately owning that port, and killed it — with nothing to flag, while its own Chrome survived unrecorded holding a port for the next session to trip over.
+Why it matters: state used to be one global `browse-tool-state.json`, and the most recent `browse-start` anywhere on the machine overwrote it. `browse-stop` in one session then read *another* session's port **and** pid, found that pid legitimately owning that port, and killed it — with nothing to flag. Its own Chrome survived unrecorded, holding a port for the next session to trip over.
 
-A `BROWSE_PORT` or `--port` that does not parse is a hard error, never a fallback to 9222 — the default port is a browser other sessions may be using, so silently redirecting a typo there is the worst available response. `--port` with no value is rejected too: it arrives as boolean `true`, and `Number(true)` is a perfectly valid-looking `1`. `--port=9223` and `--port 9223` are equivalent; an exported-but-empty `BROWSE_PORT=` reads as absent, while `--port=` is an error.
+A `BROWSE_PORT` or `--port` that does not parse is a hard error, never a fallback to 9222. The default port is a browser other sessions may be using, so silently redirecting a typo there is the worst available response. `--port` with no value is rejected too: it arrives as boolean `true`, and `Number(true)` is a perfectly valid-looking `1`. `--port=9223` and `--port 9223` are equivalent. An exported-but-empty `BROWSE_PORT=` reads as absent, while `--port=` is an error.
 
 Chrome permits one instance per profile. Because every session now defaults to the same `shared` profile, the usual answer to "already running" is to use the browser that exists rather than start a second one:
 
-- If the port is held by a Chrome running **the profile you asked for**, `browse-start` adopts it — records it in state and exits 0. Leaving it unrecorded would strand a live browser with no state entry, which silently disables the wrong-browser check (it fails open on a null state). Adoption matches on profile, not mode, so it says so when the running browser is headless and you asked for headed (or the reverse). `--reseed` cannot be satisfied by adoption and is refused with a non-zero exit rather than reported as done.
+- If the port is held by a Chrome running **the profile you asked for**, `browse-start` adopts it — records it in state and exits 0. Leaving it unrecorded would strand a live browser with no state entry, and that silently disables the wrong-browser check (it fails open on a null state). Adoption matches on profile, not mode. When the running browser is headless and you asked for headed (or the reverse), it says so. `--reseed` cannot be satisfied by adoption and is refused with a non-zero exit rather than reported as done.
 - If the port is held by a **different** profile, it refuses and names the squatter.
 - If the profile is open but on another port, it reads Chrome's `SingletonLock`, names the holding pid, and prints the `BROWSE_PORT` to use.
 
 **Port ownership is verified, not assumed.** `browse-start` refuses to start when
 something it does not track already holds the debugging port, and names the
-squatter's pid and profile; after launching it confirms the port belongs to the
+squatter's pid and profile. After launching, it confirms the port belongs to the
 Chrome it just spawned. `browse-eval` and friends refuse to connect when the
 port's owner is not the tracked pid. Fail-open: if `lsof` cannot answer, the
 checks are skipped rather than blocking work.
 
 Why this exists: the old code only checked that the recorded pid was *alive*,
 never that it owned the port. A headless orphan from a finished session could
-hold `9222` while `browse-start` reported success for a different profile, and
-every subsequent command — navigation, screenshots, cookie reads — ran against
-the orphan and succeeded. On 2026-08-02 that produced four false "logged out"
-readings and cost an 8.4 GB profile clone deleted on a false negative. A silent
-wrong-browser failure is worse than a loud refusal.
-
-- **`--profile` cannot transplant a logged-in Facebook session.** Cookies copy
-  fine, but `c_user`/`xs` are bound to the originating profile and Chrome drops
-  them; only `datr` survives. Log into the automation profile directly instead.
-  Chrome 136+ likewise refuses `--remote-debugging-port` on your real default
-  profile, so driving your everyday browser is not an option either.
-
-Parallel with real Chrome on macOS: browse-tool Chrome runs as its own process but macOS merges it with your real Chrome in the Dock (same app bundle). Use `Cmd+~` to cycle between their windows, or install Chromium / Chrome Canary and set `CHROME_PATH=/path/to/Chromium.app/Contents/MacOS/Chromium` for a truly separate Dock app.
+hold `9222` while `browse-start` reported success for a different profile.
+Every subsequent command — navigation, screenshots, cookie reads — then ran
+against the orphan and succeeded. On 2026-08-02 that produced four false
+"logged out" readings and cost an 8.4 GB profile clone deleted on a false
+negative. A silent wrong-browser failure is worse than a loud refusal.
 
 ### `browse-stop [--port <n>] [--force]`
 Kill whatever holds the debugging port, then clear the state and the leases for
 that browser. Exits non-zero if anything is still listening afterwards. Killing
-only the tracked pid is how orphans accumulated: the kill failed with `ESRCH`,
+only the tracked pid is how orphans accumulated. The kill failed with `ESRCH`,
 the state file was deleted anyway, and a live headless Chrome kept the port for
 the next session to trip over.
 
@@ -137,22 +130,23 @@ A lease records the port it belongs to. One written before that field existed is
 attributed by asking the browser, over `/json/list`, whether it actually holds
 that lease's tab — an exact answer rather than a guess. Only when the browser
 cannot be asked does the lease count as a possible match and block. Both halves
-matter: an earlier version compared ports exactly, matched none of the eight live
-legacy leases, and killed the browser they were all using; the version after it
-blocked on every port for the twelve hours until those leases went stale.
+matter. An earlier version compared ports exactly, matched none of the eight
+live legacy leases, and killed the browser they were all using. The version
+after it blocked on every port for the twelve hours until those leases went
+stale.
 
 Presence is decided by `lsof` **or** a `/json/version` probe, not `lsof` alone.
 `portOwners()` returns an empty list both for "nothing is listening" and for
 "could not determine", and it is deliberately fail-open so it never blocks
-ordinary work — gating a destructive guard on that alone points the fail-open the
-wrong way. The probe checks for the DevTools payload, not just HTTP 200, so an
-unrelated server on the port is not mistaken for a browser.
+ordinary work. Gating a destructive guard on that alone points the fail-open
+the wrong way. The probe checks for the DevTools payload, not just HTTP 200, so
+an unrelated server on the port is not mistaken for a browser.
 
-The probe does **not** cover the window where a Chrome has spawned but is not yet
-listening — a TCP connect is refused then, so it reports absent exactly as `lsof`
-does. That window is handled structurally instead: **leases are cleared only
-after the port is confirmed released**, never merely because a `SIGTERM` was
-sent. A signal accepted but not acted on within the grace period (hung renderer,
+The probe does **not** cover the window where a Chrome has spawned but is not
+yet listening. A TCP connect is refused then, so the probe reports absent
+exactly as `lsof` does. That window is handled structurally instead: **leases
+are cleared only after the port is confirmed released**, never merely because a
+`SIGTERM` was sent. A signal accepted but not acted on within the grace period (hung renderer,
 a modal blocking shutdown) leaves every lease intact and exits non-zero.
 
 When nothing was stopped, only *your own* lease **for that port** is cleared —
@@ -165,6 +159,9 @@ live-session guard, not the absence of a pid to signal.
 
 ### `browse-nav <url> [--new] [--wait]`
 Navigate the active tab (or a new one with `--new`). `https://` is auto-prepended if the URL has no scheme. `--wait` waits for `networkidle2` instead of `domcontentloaded`. Prints final URL and title.
+
+### `browse-tabs [list | close <index|target-id> [--force]]`
+List open tabs with their URL/title, or close one. `list` shows a short target id and marks ownership: `*` this session's tab, `~` another session's, blank unclaimed. `close` accepts a target id (or unique prefix) as well as an index. Prefer the id: it is stable, whereas indices renumber when any session opens or closes a tab between your `list` and your `close`. Closing a tab held by another live session is refused unless you pass `--force`.
 
 ### `browse-eval '<js>'` | `browse-eval --file script.js` | `echo '…' | browse-eval --stdin`
 Run JavaScript in the active page. Code is wrapped in `async () => { … }`, so use `return` for a value and `await` freely. Result is JSON-serialized to stdout. Prefer writing scripts to files for anything non-trivial.
@@ -183,13 +180,10 @@ Capture the viewport (or full page with `--full`) as PNG. Prints the path so you
 Navigate to URL, wait for readiness, optionally wait for a selector or additional time, then screenshot in one command. Replaces the `browse-nav && sleep N && browse-screenshot` pattern. Prints the output path.
 
 ### `browse-markdown <url> [--wait] [--wait-ms <n>] [--wait-for <selector>] [--raw]`
-Navigate to URL, strip nav/ads/boilerplate with Readability, convert the main content to markdown with Turndown. Prints `# title` + markdown body to stdout. Falls back to the full page body if Readability finds no article-shaped content (dashboards, SPAs, listings) — `--raw` skips Readability entirely and always converts the full body. Use this instead of `browse-eval 'return document.body.innerText'` when you want clean, LLM-ready text from an article/blog/docs page rather than raw eval output.
+Navigate to URL, strip nav/ads/boilerplate with Readability, convert the main content to markdown with Turndown. Prints `# title` + markdown body to stdout. Falls back to the full page body if Readability finds no article-shaped content (dashboards, SPAs, listings). `--raw` skips Readability entirely and always converts the full body. For clean, LLM-ready text from an article/blog/docs page, use this instead of `browse-eval 'return document.body.innerText'`.
 
 ### `browse-crawl <start-url> [--depth N] [--include prefix] [--max N] [--out dir] [--wait]`
-BFS crawl from `start-url`, following same-origin links (or links matching `--include prefix` for a narrower scope) up to `--depth` levels deep (default `1`: the start page plus its direct links), capped at `--max` pages total (default `20`). Each visited page is written as clean markdown (Readability + Turndown, same extraction as `browse-markdown`) to `--out dir` (default a fresh temp dir), plus a `manifest.json` listing `{url, title, file}` for every page. Prints each file path to stdout as it's written; prints the final page count and output dir to stderr. Visited URLs are deduped (fragment-stripped) so it never re-fetches a page.
-
-### `browse-tabs [list | close <index|target-id> [--force]]`
-List open tabs with their URL/title, or close one. `list` shows a short target id and marks ownership: `*` this session's tab, `~` another session's, blank unclaimed. `close` accepts a target id (or unique prefix) as well as an index — the id is stable, whereas indices renumber when any session opens or closes a tab between your `list` and your `close`. Closing a tab held by another live session is refused unless you pass `--force`.
+BFS crawl from `start-url`, following same-origin links up to `--depth` levels deep, capped at `--max` pages total (default `20`). `--include prefix` narrows which links are followed. Default depth is `1`: the start page plus its direct links. Each visited page is written as clean markdown (Readability + Turndown, same extraction as `browse-markdown`) to `--out dir` (default a fresh temp dir). A `manifest.json` lists `{url, title, file}` for every page. Prints each file path to stdout as it's written, and the final page count and output dir to stderr. Visited URLs are deduped (fragment-stripped) so it never re-fetches a page.
 
 ### `browse-events [<Domain.event> | '<Domain.*>' ...] [--console] [--network] [--duration <sec>] [--count <n>] [--out <file>]`
 Stream Chrome DevTools Protocol events from this session's tab as JSON lines (`{ts, event, params}`), one per line, to stdout or appended to `--out`. Use it to watch what a page actually does — console output, failing requests, navigation — while other commands (or a human) drive it.
@@ -241,7 +235,7 @@ browse-eval 'return document.querySelectorAll("[data-testid]").length'
 browse-pick  # human clicks the element in Chrome
 ```
 
-**Bigger, project-specific scripts:** `examples/` holds standalone scripts built on `lib/connect.js` directly (bypassing the `bin/` commands) for cases too specific to generalize — e.g. `examples/rally-audit.mjs`, a one-pass route auditor for a particular project's dev server (hardcoded routes/slugs/viewport). Not installed on PATH; run with `node examples/<script>.mjs` after `browse-start`.
+**Bigger, project-specific scripts:** `examples/` holds standalone scripts built on `lib/connect.js` directly (bypassing the `bin/` commands) for cases too specific to generalize. E.g. `examples/rally-audit.mjs`, a one-pass route auditor for a particular project's dev server (hardcoded routes/slugs/viewport). Not installed on PATH; run with `node examples/<script>.mjs` after `browse-start`.
 
 **Read an article as clean markdown:**
 ```bash
@@ -263,3 +257,4 @@ cat /tmp/docs-crawl/manifest.json
 - If `browse-nav` says "Cannot connect", run `browse-start`.
 - If Chrome is already open with your real profile, quit it first or pick a different `--port`. browse-tool always launches into a temp `--user-data-dir`, so it will never touch your real profile directly.
 - Override Chrome path with `CHROME_PATH=/path/to/chrome`.
+- Running alongside real Chrome on macOS: browse-tool's Chrome is its own process, but macOS merges it with your real Chrome in the Dock (same app bundle). Use `Cmd+~` to cycle between their windows, or install Chromium / Chrome Canary and set `CHROME_PATH=/path/to/Chromium.app/Contents/MacOS/Chromium` for a truly separate Dock app.
