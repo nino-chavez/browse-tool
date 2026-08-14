@@ -98,6 +98,20 @@ const port = resolvePort(args.port);
 const STATE_FILE = stateFile(port);
 const state = readState(port);
 
+// A containerised browser must not be stopped from here. portOwners() on a
+// published Docker port returns the docker-proxy pid, not Chrome — killing it
+// would tear down that port mapping for the daemon while leaving the browser
+// running, and --force would make it worse rather than better. The box owns its
+// own lifecycle; say so and stop.
+if (state?.container) {
+  console.error(
+    `Port ${port} is a browser-box container (${state.container}), not a local Chrome.\n` +
+      `Killing the port owner here would hit Docker's proxy, not the browser.\n` +
+      `Stop it with:  browser-box stop --profile ${state.profileName ?? "default"}`,
+  );
+  process.exit(1);
+}
+
 const targets = new Set(portOwners(port));
 const responds = await browserResponds(port);
 const browserPresent = targets.size > 0 || responds;
