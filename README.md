@@ -2,7 +2,7 @@
 
 <img src="assets/readme/hero.svg" alt="browse-tool: a coding agent drives Chrome from bash — browse-start, browse-nav, browse-eval returning &quot;Hacker News&quot; — described in a few hundred tokens versus the 13.7k (Playwright MCP) and 18.0k (Chrome DevTools MCP) an equivalent MCP loads up front." width="100%">
 
-Minimal Bash-invokable browser tools for coding agents. Ten small CLI scripts drive a real Chrome — navigate, run JS, screenshot, scrape to markdown, crawl — described in a few hundred tokens instead of the 13–18k an equivalent MCP loads up front. Agents lean on standard DOM/JS knowledge instead of memorizing tool schemas.
+Minimal Bash-invokable browser tools for coding agents. Twelve small CLI scripts drive a real Chrome — navigate, run JS, screenshot, scrape to markdown, crawl, stream CDP events — described in a few hundred tokens instead of the 13–18k an equivalent MCP loads up front. Agents lean on standard DOM/JS knowledge instead of memorizing tool schemas.
 
 Inspired by Mario Zechner's [What if you don't need MCP at all?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/).
 
@@ -190,6 +190,31 @@ BFS crawl from `start-url`, following same-origin links (or links matching `--in
 
 ### `browse-tabs [list | close <index|target-id> [--force]]`
 List open tabs with their URL/title, or close one. `list` shows a short target id and marks ownership: `*` this session's tab, `~` another session's, blank unclaimed. `close` accepts a target id (or unique prefix) as well as an index — the id is stable, whereas indices renumber when any session opens or closes a tab between your `list` and your `close`. Closing a tab held by another live session is refused unless you pass `--force`.
+
+### `browse-events [<Domain.event> | '<Domain.*>' ...] [--console] [--network] [--duration <sec>] [--count <n>] [--out <file>]`
+Stream Chrome DevTools Protocol events from this session's tab as JSON lines (`{ts, event, params}`), one per line, to stdout or appended to `--out`. Use it to watch what a page actually does — console output, failing requests, navigation — while other commands (or a human) drive it.
+
+- **`--console`** subscribes to `Runtime.consoleAPICalled`, `Runtime.exceptionThrown`, `Log.entryAdded`. **`--network`** to `Network.requestWillBeSent`, `Network.responseReceived`, `Network.loadingFailed`. With no events named you get both presets.
+- Positional names subscribe to exact events (`Page.loadEventFired`) or a whole domain (`'Page.*'` — quote it, or the shell globs it). The needed `<Domain>.enable` calls are sent automatically.
+- Runs until Ctrl-C by default; `--duration <sec>` or `--count <n>` bounds the run for scripted use. Typical agent pattern: start it in the background with `--out`, drive the page, then read the file.
+
+```bash
+browse-events --network --duration 15 --out /tmp/net.jsonl &
+browse-nav https://example.com --wait
+browse-eval 'document.querySelector("#checkout").click()'
+wait; grep loadingFailed /tmp/net.jsonl
+```
+
+### `browse-cdp <Domain.method> ['<json-params>'] [--browser]`
+Raw CDP passthrough: send any protocol method to this session's tab and print the JSON result. The escape hatch for anything the task-level commands don't cover — including methods Chrome shipped after this tool was written. `--browser` targets the browser instead of the tab (for `Target.*`, `Browser.*`, `SystemInfo.*`).
+
+```bash
+browse-cdp Emulation.setCPUThrottlingRate '{"rate": 4}'
+browse-cdp Network.emulateNetworkConditions '{"offline": false, "latency": 200, "downloadThroughput": 100000, "uploadThroughput": 50000}'
+browse-cdp Browser.getVersion --browser
+```
+
+Prefer the task commands when one fits — `browse-eval` over `Runtime.evaluate`, `browse-screenshot` over `Page.captureScreenshot` (which dumps base64 to stdout). They cost fewer tokens per call and handle output sensibly.
 
 ### `browse-pick`
 Enable an interactive element picker in the active tab. Hover highlights elements, click to pick, Cmd/Ctrl+click to add multiple, Enter to finish, Esc to cancel. Returns JSON with tag, id, class, text, html, bounding rect, and a heuristic selector for each picked element. Use this when you need the human to point at something instead of guessing at selectors.

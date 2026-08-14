@@ -1,0 +1,53 @@
+#!/usr/bin/env node
+import { connect, activeOrFirstPage, parseArgs } from "../lib/connect.js";
+
+// Raw CDP passthrough — the escape hatch for anything the task-level commands
+// don't cover, including protocol methods added after this tool was written.
+// The method name and params go straight to Chrome; the JSON result comes
+// straight back. Prefer the task commands (browse-eval, browse-screenshot, …)
+// when one fits: they cost fewer tokens per call and handle output sensibly
+// (e.g. Page.captureScreenshot returns base64 in stdout; browse-screenshot
+// writes a file you can Read).
+
+const args = parseArgs(process.argv.slice(2), { browser: "bool" });
+const [method, rawParams] = args._;
+
+if (!method || !/^[A-Za-z]+\.[A-Za-z0-9]+$/.test(method)) {
+  console.error(
+    "Usage: browse-cdp <Domain.method> ['<json-params>'] [--browser] [--port <n>]\n" +
+      "Examples:\n" +
+      "  browse-cdp Page.navigate '{\"url\": \"https://example.com\"}'\n" +
+      "  browse-cdp Emulation.setCPUThrottlingRate '{\"rate\": 4}'\n" +
+      "  browse-cdp Browser.getVersion --browser\n" +
+      "--browser sends to the browser target instead of this session's tab (Target.*, Browser.*, SystemInfo.*).",
+  );
+  process.exit(1);
+}
+
+let params = {};
+if (rawParams !== undefined) {
+  try {
+    params = JSON.parse(rawParams);
+  } catch (err) {
+    console.error(`Params are not valid JSON: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+const browser = await connect(args.port);
+const cdp = args.browser
+  ? await browser.target().createCDPSession()
+  : await (await activeOrFirstPage(browser)).createCDPSession();
+
+try {
+  const result = await cdp.send(method, params);
+  console.log(JSON.stringify(result ?? {}, null, 2));
+} catch (err) {
+  // Chrome's own error text names unknown methods and bad params precisely;
+  // pass it through rather than paraphrasing.
+  console.error(`${method} failed: ${err.message}`);
+  process.exitCode = 1;
+} finally {
+  await cdp.detach().catch(() => {});
+  browser.disconnect();
+}

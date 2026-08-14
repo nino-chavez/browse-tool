@@ -10,10 +10,13 @@
     "browse-nav": "./bin/browse-nav",
     "browse-eval": "./bin/browse-eval",
     "browse-screenshot": "./bin/browse-screenshot",
+    "browse-shot": "./bin/browse-shot",
     "browse-pick": "./bin/browse-pick",
     "browse-tabs": "./bin/browse-tabs",
     "browse-markdown": "./bin/browse-markdown",
-    "browse-crawl": "./bin/browse-crawl"
+    "browse-crawl": "./bin/browse-crawl",
+    "browse-events": "./bin/browse-events",
+    "browse-cdp": "./bin/browse-cdp"
   },
   "scripts": {
     "reader:check": "node tools/lib/encounter-audit.mjs --root=. --strict"

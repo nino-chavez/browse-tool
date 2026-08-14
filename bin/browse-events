@@ -1,0 +1,102 @@
+#!/usr/bin/env node
+import { createWriteStream } from "node:fs";
+import { connect, activeOrFirstPage, parseArgs } from "../lib/connect.js";
+
+// The two dominant "watch what happens" use cases, pre-bundled so an agent
+// doesn't need to recall CDP event names for them.
+const PRESETS = {
+  console: ["Runtime.consoleAPICalled", "Runtime.exceptionThrown", "Log.entryAdded"],
+  network: ["Network.requestWillBeSent", "Network.responseReceived", "Network.loadingFailed"],
+};
+
+const args = parseArgs(process.argv.slice(2), { console: "bool", network: "bool" });
+
+const usage = () => {
+  console.error(
+    "Usage: browse-events [<Domain.event> | '<Domain.*>' ...] [--console] [--network] " +
+      "[--duration <sec>] [--count <n>] [--out <file>] [--port <n>]\n" +
+      "Streams CDP events from this session's tab as JSON lines. " +
+      "No events named: --console + --network presets. Quote wildcards ('Network.*') so the shell doesn't glob them.",
+  );
+  process.exit(1);
+};
+
+const patterns = [...args._];
+if (args.console) patterns.push(...PRESETS.console);
+if (args.network) patterns.push(...PRESETS.network);
+if (patterns.length === 0) patterns.push(...PRESETS.console, ...PRESETS.network);
+
+for (const p of patterns) {
+  if (!/^[A-Za-z]+\.([A-Za-z]+|\*)$/.test(p)) {
+    console.error(`Not a CDP event name: '${p}' (expected Domain.event or Domain.*)`);
+    usage();
+  }
+}
+
+// Same philosophy as --port: a value that does not parse is a hard error, not a
+// silent fallback to "run forever".
+const bound = (name) => {
+  if (args[name] === undefined) return null;
+  const n = Number(args[name]);
+  if (!Number.isFinite(n) || n <= 0) {
+    console.error(`--${name} must be a positive number, got '${args[name]}'`);
+    process.exit(1);
+  }
+  return n;
+};
+const duration = bound("duration");
+const count = bound("count");
+
+const sink = args.out ? createWriteStream(args.out, { flags: "a" }) : process.stdout;
+
+const browser = await connect(args.port);
+const page = await activeOrFirstPage(browser);
+const cdp = await page.createCDPSession();
+
+let exiting = false;
+async function shutdown(code, why) {
+  if (exiting) return;
+  exiting = true;
+  if (why) console.error(why);
+  await cdp.detach().catch(() => {});
+  browser.disconnect();
+  if (sink !== process.stdout) await new Promise((r) => sink.end(r));
+  process.exit(code);
+}
+
+// Enabling the domain is what makes it emit. Some domains have no .enable or
+// need params — those events either flow without it or the wildcard simply
+// never matches, so a failed enable is not an error worth stopping for.
+const domains = [...new Set(patterns.map((p) => p.split(".")[0]))];
+for (const d of domains) {
+  try {
+    await cdp.send(`${d}.enable`);
+  } catch {}
+}
+
+const matches = (type) =>
+  patterns.some((p) => (p.endsWith(".*") ? type.startsWith(p.slice(0, -1)) : type === p));
+
+let seen = 0;
+// Puppeteer's EventEmitter is mitt-based: '*' handlers receive (type, event).
+// Non-protocol emissions (internal symbols) fail the string/pattern check.
+cdp.on("*", (type, params) => {
+  if (typeof type !== "string" || !matches(type)) return;
+  sink.write(JSON.stringify({ ts: new Date().toISOString(), event: type, params }) + "\n");
+  seen++;
+  if (count !== null && seen >= count) void shutdown(0);
+});
+
+page.on("close", () => void shutdown(1, "Tab closed; event stream ended."));
+browser.on("disconnected", () => void shutdown(1, "Browser gone; event stream ended."));
+process.on("SIGINT", () => void shutdown(0));
+process.on("SIGTERM", () => void shutdown(0));
+
+console.error(
+  `watching ${patterns.join(", ")} on ${page.url()}` +
+    (duration !== null ? ` for ${duration}s` : "") +
+    (count !== null ? ` (max ${count} events)` : "") +
+    (duration === null && count === null ? " — Ctrl-C to stop" : ""),
+);
+
+if (duration !== null) setTimeout(() => void shutdown(0), duration * 1000);
