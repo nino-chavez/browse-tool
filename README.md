@@ -14,6 +14,55 @@ Inspired by Mario Zechner's [What if you don't need MCP at all?](https://marioze
 - Outputs pipe, save, and compose with ordinary shell tools.
 - Adding a command is a single file — no protocol, no rebuild, no restart.
 
+## When to use browser-box instead
+
+browse-tool drives Chrome on your Mac. That gives two modes, and a signed-in app
+you are trying to *act* inside often fits neither.
+
+| | what it is | the catch |
+|---|---|---|
+| `browse-start --headless` | no display at all | some sites silently no-op |
+| `browse-start` (default) | real window, your screen | owns your screen for the whole run |
+| `browser-box start` | real window, virtual display, in a container | needs Docker |
+
+**Headless can fail without failing.** Measured on Facebook: menus, mention
+typeaheads and file choosers do nothing under `--headless=new` — ordinary buttons
+still work, menu items don't, and nothing raises. The script reports success and
+posted nothing. Headless Chrome also puts `Headless` in its User-Agent, which the
+site can read; browser-box asserts that token is absent on every start.
+
+**Headed costs you the machine.** A visible Chrome takes focus and screen for as
+long as the job runs, so any long automation is mutually exclusive with using your
+own computer.
+
+[browser-box](browser-box/) ships in this repo for that reason: real headed Chrome on an Xvfb
+virtual display inside a container. Chrome composites into a genuine X server, so it
+behaves like a desktop browser, and that server is attached to no monitor and no
+host. `browser-box view` opens the live screen in a tab when you want to watch or
+sign in.
+
+It lives here rather than in its own repo because it writes the same state file
+this tool reads — `$TMPDIR/browse-tool-state-<port>.json`, a private format. Split
+across two repos, a change to that file breaks the other side silently and no test
+catches it. Bundled, it is one change. Docker is required only if you use it;
+nothing else in this repo depends on it.
+
+Every `browse-*` command works against a running box unchanged:
+
+```bash
+browser-box start --profile social      # CDP on 9400
+BROWSE_PORT=9400 browse-nav "https://example.com"
+BROWSE_PORT=9400 browse-eval 'return document.title'
+```
+
+**The split in one line.** Reach for browse-tool to *read* a page — navigate, scrape,
+screenshot, crawl, check a selector. Reach for browser-box to *act* inside a
+logged-in app that resists automation, or for any job long enough that you want your
+screen back while it runs. A LinkedIn publisher built on this pair uses browser-box
+for the second reason, and its composer is the shape that argues for the first: a
+Quill editor that leaves the Post button disabled unless the text arrives as real
+keystrokes, followed by a wait for the link preview to attach.
+
 ## Requirements
 
 - Node.js ≥ 20
@@ -29,6 +78,8 @@ Inspired by Mario Zechner's [What if you don't need MCP at all?](https://marioze
 
   It does not self-update. Re-run that command to upgrade; browse-tool picks the newest
   version present.
+- Docker, **only** if you use the bundled [browser-box](browser-box/) — see "When to use
+  browser-box instead". Nothing else in this repo needs it.
 
 ## Install
 

@@ -1,0 +1,230 @@
+#!/usr/bin/env bash
+# browser-box — a headed browser that isn't on your screen.
+#
+#   browser-box start [--profile <name>] [--port <n>] [--screen 1440x900]
+#                     [--mount <hostdir>]  expose files to the box at /media
+#   browser-box stop  [--profile <name>]
+#   browser-box status
+#   browser-box view  [--profile <name>]     open the live screen in a browser tab
+#   browser-box login --user <u> [--profile <name>]   fill a login form, one shot
+#   browser-box type  [--profile <name>]     type STDIN into the box (for secrets)
+#   browser-box shell [--profile <name>]     a shell inside the box
+#   browser-box rm    [--profile <name>]     delete the profile (logins included)
+#
+# Every browse-* command works against a running box via BROWSE_PORT, because
+# start writes the same state file browse-tool reads.
+set -euo pipefail
+
+# Overridable so a rebuilt image can be proven against a throwaway profile
+# before the box everyone's logins live in is pointed at it.
+IMAGE="${BROWSER_BOX_IMAGE:-browser-box}"
+ROOT="${BROWSER_BOX_HOME:-$HOME/.browser-box}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+STATE_DIR="${TMPDIR:-/tmp}"
+
+profile=default
+port=""
+vnc_port=""
+screen=1440x900
+user=""
+mount=""
+
+cmd="${1:-}"; shift || true
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --profile) profile="$2"; shift 2 ;;
+    --user) user="$2"; shift 2 ;;
+    --mount) mount="$2"; shift 2 ;;
+    --port) port="$2"; shift 2 ;;
+    --vnc-port) vnc_port="$2"; shift 2 ;;
+    --screen) screen="$2"; shift 2 ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
+  esac
+done
+
+container="browser-box-$profile"
+profile_dir="$ROOT/profiles/$profile"
+state_file="$STATE_DIR/browse-tool-state-PORT.json"
+
+die() { echo "$*" >&2; exit 1; }
+
+need_docker() {
+  docker info >/dev/null 2>&1 || die \
+    "Docker isn't running. Start Docker Desktop (open -a Docker), then retry."
+}
+
+# First free TCP port at or above $1, so a second profile doesn't collide.
+free_port() {
+  local p="$1"
+  while lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1; do p=$((p + 1)); done
+  echo "$p"
+}
+
+running_port() {
+  docker inspect -f '{{range $p, $c := .NetworkSettings.Ports}}{{if $c}}{{(index $c 0).HostPort}}:{{$p}} {{end}}{{end}}' \
+    "$container" 2>/dev/null | tr ' ' '\n' | grep '9400/tcp' | cut -d: -f1
+}
+running_vnc() {
+  docker inspect -f '{{range $p, $c := .NetworkSettings.Ports}}{{if $c}}{{(index $c 0).HostPort}}:{{$p}} {{end}}{{end}}' \
+    "$container" 2>/dev/null | tr ' ' '\n' | grep '6080/tcp' | cut -d: -f1
+}
+
+ensure_image() {
+  docker image inspect "$IMAGE" >/dev/null 2>&1 && return
+  echo "Building $IMAGE (first run only)..."
+  docker build -t "$IMAGE" "$HERE" || die "image build failed"
+}
+
+case "$cmd" in
+  start)
+    need_docker
+    ensure_image
+    if docker ps --format '{{.Names}}' | grep -qx "$container"; then
+      p="$(running_port)"
+      echo "Already running: $container on CDP port $p"
+      exit 0
+    fi
+    docker rm -f "$container" >/dev/null 2>&1 || true
+    mkdir -p "$profile_dir"
+    [ -n "$port" ] || port="$(free_port 9400)"
+    [ -n "$vnc_port" ] || vnc_port="$(free_port 6080)"
+
+    # --shm-size: Chromium crashes on Docker's default 64MB /dev/shm under any
+    # real page. This is the single most common containerised-Chrome failure.
+    # --init puts tini at PID 1 to forward signals. Without it Chromium is PID 1
+    # itself, and Linux discards signals to PID 1 that have no installed
+    # handler — so `docker stop` was a no-op followed by SIGKILL, and Chromium
+    # died without flushing its cookie store. Measured: a login set before stop
+    # came back to an empty Cookies table, which is precisely the failure this
+    # box exists to prevent.
+    docker run -d --name "$container" \
+      --init \
+      --shm-size=2g \
+      --restart unless-stopped \
+      -p "127.0.0.1:$port:9400" \
+      -p "127.0.0.1:$vnc_port:6080" \
+      -e SCREEN="${screen}x24" \
+      -v "$profile_dir:/profile" \
+      ${mount:+-v "$mount:/media:ro"} \
+      "$IMAGE" >/dev/null
+
+    for i in $(seq 1 60); do
+      curl -sf --max-time 2 "http://127.0.0.1:$port/json/version" >/dev/null 2>&1 && break
+      sleep 1
+      [ "$i" = 60 ] && die "box started but CDP never answered on $port (docker logs $container)"
+    done
+
+    # browse-tool reads this. `container` is load-bearing, not decoration: the
+    # port is held by Docker's proxy, so browse-tool's pid-based ownership check
+    # cannot attribute it and browse-stop would otherwise target the proxy.
+    printf '{"port": %s, "userDataDir": "%s", "profileName": "%s", "container": "%s", "vncPort": %s, "started": %s000}\n' \
+      "$port" "$profile_dir" "$profile" "$container" "$vnc_port" "$(date +%s)" \
+      > "${state_file/PORT/$port}"
+
+    echo "Box '$profile' up."
+    echo "  CDP    127.0.0.1:$port     → BROWSE_PORT=$port browse-nav https://example.com"
+    echo "  Screen http://127.0.0.1:$vnc_port/vnc.html?autoconnect=1&resize=scale"
+    ;;
+
+  stop)
+    need_docker
+    p="$(running_port)"
+    # SIGTERM and wait, rather than `rm -f`'s SIGKILL. Chromium writes cookies
+    # and session state lazily; killing it outright can discard a login that
+    # happened seconds earlier, which is the one thing this box exists to keep.
+    docker stop -t 15 "$container" >/dev/null 2>&1 || die "no such box: $profile"
+    docker rm "$container" >/dev/null 2>&1 || true
+    [ -n "$p" ] && rm -f "${state_file/PORT/$p}"
+    echo "Box '$profile' stopped. Profile kept at $profile_dir"
+    ;;
+
+  status)
+    need_docker
+    found=0
+    while read -r name; do
+      [ -z "$name" ] && continue
+      found=1
+      container="$name"
+      pr="${name#browser-box-}"
+      printf '%-16s CDP %-6s screen http://127.0.0.1:%s/vnc.html\n' \
+        "$pr" "$(running_port)" "$(running_vnc)"
+    done < <(docker ps --format '{{.Names}}' | grep '^browser-box-' || true)
+    [ "$found" = 0 ] && echo "No boxes running."
+    ;;
+
+  view)
+    need_docker
+    v="$(running_vnc)"
+    [ -n "$v" ] || die "box '$profile' isn't running"
+    open "http://127.0.0.1:$v/vnc.html?autoconnect=1&resize=scale"
+    ;;
+
+  type)
+    # Type stdin into whatever has focus in the box. Exists because host→container
+    # clipboard is an unreliable path for the one thing you always need to get in
+    # there: a credential. Reading from STDIN rather than an argument keeps the
+    # secret out of argv (where `ps` would show it), out of shell history, and out
+    # of any agent transcript driving this.
+    #
+    #   op read "op://Developer Secrets/<item>/password" | browser-box type
+    #
+    # Click the target field in the viewer first — xdotool types at the focus.
+    need_docker
+    docker exec "$container" sh -c 'command -v xdotool >/dev/null' 2>/dev/null \
+      || die "this box predates 'type'; recreate it: browser-box stop && browser-box start --profile $profile"
+    docker exec -i -e DISPLAY=:99 "$container" xdotool type --clearmodifiers --delay 40 --file - \
+      || die "type failed — is the box running?"
+    echo "typed into $container (focus follows whatever you last clicked in the viewer)"
+    ;;
+
+  login)
+    # Fill a username/password form in one shot: <user> TAB <pass> ENTER.
+    #
+    # The password is read with `read -s` from YOUR terminal, where pasting works
+    # normally — the clipboard only breaks across the VNC boundary, and this
+    # never crosses it. Nothing lands in argv, shell history, or an agent
+    # transcript. Tab-and-Enter means no clicking around the viewer either.
+    #
+    #   browser-box login --user me@example.com --profile social
+    #
+    # Assumes focus is in the first field, which is where login pages put it.
+    need_docker
+    docker exec "$container" sh -c 'command -v xdotool >/dev/null' 2>/dev/null \
+      || die "this box predates 'login'; recreate it: browser-box stop && browser-box start --profile $profile"
+    if [ -z "${user:-}" ]; then
+      printf 'Username: '
+      read -r user
+    fi
+    printf 'Password (hidden, paste works): '
+    read -rs pass
+    printf '\n'
+    [ -n "$pass" ] || die "no password given"
+    printf '%s\t%s\n' "$user" "$pass" \
+      | docker exec -i -e DISPLAY=:99 "$container" xdotool type --clearmodifiers --delay 40 --file -
+    unset pass
+    echo "Submitted. Watch the viewer for a device checkpoint, and leave the box"
+    echo "running ~30s afterwards so Chromium commits the session to disk."
+    ;;
+
+  shell)
+    need_docker
+    docker exec -it "$container" bash
+    ;;
+
+  rm)
+    need_docker
+    docker rm -f "$container" >/dev/null 2>&1 || true
+    [ -d "$profile_dir" ] || die "no such profile: $profile"
+    echo "This deletes $profile_dir including every logged-in session in it."
+    printf 'Type the profile name to confirm: '
+    read -r confirm
+    [ "$confirm" = "$profile" ] || die "aborted"
+    rm -rf "$profile_dir"
+    echo "Removed $profile_dir"
+    ;;
+
+  *)
+    sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac
