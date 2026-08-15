@@ -138,13 +138,66 @@ if (owners.length) {
   process.exit(1);
 }
 
+// Chrome for Testing, installed under BROWSE_CHROME_HOME by
+// `npx @puppeteer/browsers install chrome@stable`. Newest version wins, so an
+// upgrade is an install and not an edit here.
+function findChromeForTesting() {
+  const root = join(process.env.BROWSE_CHROME_HOME || join(homedir(), ".browse-tool", "chrome"), "chrome");
+  let versions;
+  try {
+    versions = readdirSync(root).sort();
+  } catch {
+    return null;
+  }
+  for (const v of versions.reverse()) {
+    for (const arch of ["chrome-mac-arm64", "chrome-mac-x64"]) {
+      const p = join(root, v, arch, "Google Chrome for Testing.app",
+                     "Contents", "MacOS", "Google Chrome for Testing");
+      if (existsSync(p)) return p;
+    }
+  }
+  return null;
+}
+
+// Prefer a browser that is NOT your browser.
+//
+// macOS identifies an app by the bundle it was launched from, so a Chrome
+// spawned out of /Applications/Google Chrome.app registers as com.google.Chrome
+// — the same app you use. LaunchServices then has nothing to tell them apart,
+// and clicking Chrome in the Dock activates whichever instance it finds first.
+// When that is one of these boxes, the click succeeds against a process that has
+// no window and cannot make one, so the browser appears frozen. Measured
+// 2026-08-14: two agent boxes registered under com.google.Chrome, one of them
+// as type="Foreground", and the Dock had been activating it for seven hours.
+//
+// Chrome for Testing is com.google.chrome.for.testing, a genuinely separate
+// identity, which makes the collision impossible rather than unlikely. It also
+// keys its cookies to "Chromium Safe Storage" instead of "Chrome Safe Storage" —
+// so profiles written by /Applications Chrome lose their logins on first launch
+// here (verified: 75 cookies in, 0 out), while cookies written under this binary
+// persist across restarts and stay encrypted. That one-time cost is why the
+// fallback below still works rather than hard-failing.
 function findChrome() {
   if (platform() === "darwin") {
+    const cft = findChromeForTesting();
+    if (cft) return cft;
     const paths = [
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
       "/Applications/Chromium.app/Contents/MacOS/Chromium",
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     ];
-    for (const p of paths) if (existsSync(p)) return p;
+    for (const p of paths) {
+      if (!existsSync(p)) continue;
+      if (p.includes("Google Chrome.app")) {
+        console.error(
+          "warning: falling back to /Applications/Google Chrome.app, which shares an\n" +
+            "app identity with your own browser — while this box runs, clicking Chrome in\n" +
+            "the Dock may open nothing. Install the separate binary to avoid it:\n" +
+            "  mkdir -p ~/.browse-tool/chrome && cd ~/.browse-tool/chrome \\\n" +
+            "    && npx @puppeteer/browsers install chrome@stable",
+        );
+      }
+      return p;
+    }
   }
   if (platform() === "linux") {
     for (const cmd of ["google-chrome", "chromium", "chromium-browser"]) {

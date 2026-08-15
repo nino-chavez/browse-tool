@@ -17,7 +17,18 @@ Inspired by Mario Zechner's [What if you don't need MCP at all?](https://marioze
 ## Requirements
 
 - Node.js ≥ 20
-- Google Chrome, Chromium, or Chrome Canary installed (point `CHROME_PATH` at the binary if it isn't auto-detected)
+- Chrome for Testing, installed once into `~/.browse-tool/chrome` (see below). browse-tool
+  prefers it over `/Applications/Google Chrome.app` so its browsers never share an app
+  identity with yours — see "Why Chrome for Testing" under Notes. Falls back to your
+  Chrome with a warning if it isn't there; `CHROME_PATH` overrides both.
+
+  ```
+  mkdir -p ~/.browse-tool/chrome && cd ~/.browse-tool/chrome \
+    && npx @puppeteer/browsers install chrome@stable
+  ```
+
+  It does not self-update. Re-run that command to upgrade; browse-tool picks the newest
+  version present.
 
 ## Install
 
@@ -299,4 +310,22 @@ cat /tmp/docs-crawl/manifest.json
 - If `browse-nav` says "Cannot connect", run `browse-start`.
 - If Chrome is already open with your real profile, quit it first or pick a different `--port`. browse-tool always launches into a temp `--user-data-dir`, so it will never touch your real profile directly.
 - Override Chrome path with `CHROME_PATH=/path/to/chrome`.
-- Running alongside real Chrome on macOS: browse-tool's Chrome is its own process, but macOS merges it with your real Chrome in the Dock (same app bundle). Use `Cmd+~` to cycle between their windows, or install Chromium / Chrome Canary and set `CHROME_PATH=/path/to/Chromium.app/Contents/MacOS/Chromium` for a truly separate Dock app.
+- **Why Chrome for Testing.** macOS identifies an app by the bundle it launched from, so a
+  Chrome spawned out of `/Applications/Google Chrome.app` registers as `com.google.Chrome` —
+  your browser's identity. LaunchServices then cannot tell them apart, and clicking Chrome in
+  the Dock activates whichever instance it finds. When that is one of these boxes, the click
+  lands on a process with no window and no way to make one, so your browser looks frozen while
+  nothing is wrong with it. Measured 2026-08-14: two boxes registered as `com.google.Chrome`,
+  one as `type="Foreground"`, and the Dock had been activating it for seven hours. Chrome for
+  Testing is `com.google.chrome.for.testing`, so the collision cannot happen.
+
+  If you ever see it anyway — a box fell back to `/Applications` Chrome, or one predates this
+  change — `open -n -a "Google Chrome"` forces a new instance instead of activating theirs.
+
+- **One-time cost when switching an existing profile.** Chrome keys its cookies to a Keychain
+  entry named after the build: `Chrome Safe Storage` for yours, `Chromium Safe Storage` for
+  Chrome for Testing. A profile written by `/Applications` Chrome cannot be decrypted by this
+  binary, and Chrome deletes cookies it cannot read — verified on a copy, 75 cookies in and 0
+  out. So the first launch under the new binary logs that profile out, once. Cookies written
+  afterwards persist across restarts and stay encrypted. Back up `<profile>/Default/Cookies`
+  first if the logins are expensive to recreate.
