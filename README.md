@@ -66,10 +66,10 @@ keystrokes, followed by a wait for the link preview to attach.
 ## Requirements
 
 - Node.js ≥ 20
-- Chrome for Testing, installed once into `~/.browse-tool/chrome` (see below). browse-tool
-  prefers it over `/Applications/Google Chrome.app` so its browsers never share an app
-  identity with yours — see "Why Chrome for Testing" under Notes. Falls back to your
-  Chrome with a warning if it isn't there; `CHROME_PATH` overrides both.
+- Chrome for Testing, installed once into `~/.browse-tool/chrome` (see below). On macOS,
+  browse-tool requires it so its browsers never share an app identity with your normal
+  Chrome — see "Why Chrome for Testing" under Notes. It refuses to fall back silently;
+  `CHROME_PATH` is an explicit override only.
 
   ```
   mkdir -p ~/.browse-tool/chrome && cd ~/.browse-tool/chrome \
@@ -359,7 +359,7 @@ cat /tmp/docs-crawl/manifest.json
 - State file: `$TMPDIR/browse-tool-state-<port>.json` (port from `BROWSE_PORT`, else 9222)
 - Tab leases: `~/.browse-tool/leases/<session>.json`, plus `<session>.incognito.json` when `BROWSE_INCOGNITO=1`
 - If `browse-nav` says "Cannot connect", run `browse-start`.
-- If Chrome is already open with your real profile, quit it first or pick a different `--port`. browse-tool always launches into a temp `--user-data-dir`, so it will never touch your real profile directly.
+- browse-tool launches from its own persistent `--user-data-dir`, so it never touches your real Chrome profile directly. Keep the profile named `shared` for long-lived authenticated QA sessions.
 - Override Chrome path with `CHROME_PATH=/path/to/chrome`.
 - **Why Chrome for Testing.** macOS identifies an app by the bundle it launched from, so a
   Chrome spawned out of `/Applications/Google Chrome.app` registers as `com.google.Chrome` —
@@ -370,13 +370,16 @@ cat /tmp/docs-crawl/manifest.json
   one as `type="Foreground"`, and the Dock had been activating it for seven hours. Chrome for
   Testing is `com.google.chrome.for.testing`, so the collision cannot happen.
 
-  If you ever see it anyway — a box fell back to `/Applications` Chrome, or one predates this
-  change — `open -n -a "Google Chrome"` forces a new instance instead of activating theirs.
+  browse-tool now refuses to start on macOS when Chrome for Testing is missing. Set
+  `CHROME_PATH` only as an explicit, temporary exception; using `/Applications` Chrome can
+  still reintroduce the collision.
 
 - **One-time cost when switching an existing profile.** Chrome keys its cookies to a Keychain
   entry named after the build: `Chrome Safe Storage` for yours, `Chromium Safe Storage` for
   Chrome for Testing. A profile written by `/Applications` Chrome cannot be decrypted by this
   binary, and Chrome deletes cookies it cannot read — verified on a copy, 75 cookies in and 0
-  out. So the first launch under the new binary logs that profile out, once. Cookies written
-  afterwards persist across restarts and stay encrypted. Back up `<profile>/Default/Cookies`
-  first if the logins are expensive to recreate.
+  out. Copying a personal profile can preserve bookmarks, tabs, and preferences, but it cannot
+  transfer authenticated Gmail, BigCommerce, or other web sessions. Sign in once in the
+  `shared` Chrome-for-Testing profile; its own cookies then persist across restarts. Do not copy
+  `<profile>/Default/Cookies` as a workaround: those cookies remain encrypted for the source
+  browser identity.

@@ -175,29 +175,20 @@ function findChromeForTesting() {
 // keys its cookies to "Chromium Safe Storage" instead of "Chrome Safe Storage" —
 // so profiles written by /Applications Chrome lose their logins on first launch
 // here (verified: 75 cookies in, 0 out), while cookies written under this binary
-// persist across restarts and stay encrypted. That one-time cost is why the
-// fallback below still works rather than hard-failing.
+// persist across restarts and stay encrypted. That one-time cost is why this
+// tool must hard-fail rather than quietly fall back to the user's browser.
 function findChrome() {
   if (platform() === "darwin") {
     const cft = findChromeForTesting();
     if (cft) return cft;
-    const paths = [
-      "/Applications/Chromium.app/Contents/MacOS/Chromium",
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    ];
-    for (const p of paths) {
-      if (!existsSync(p)) continue;
-      if (p.includes("Google Chrome.app")) {
-        console.error(
-          "warning: falling back to /Applications/Google Chrome.app, which shares an\n" +
-            "app identity with your own browser — while this box runs, clicking Chrome in\n" +
-            "the Dock may open nothing. Install the separate binary to avoid it:\n" +
-            "  mkdir -p ~/.browse-tool/chrome && cd ~/.browse-tool/chrome \\\n" +
-            "    && npx @puppeteer/browsers install chrome@stable",
-        );
-      }
-      return p;
-    }
+    throw new Error(
+      "Chrome for Testing is required on macOS. browse-tool will not fall back to\n" +
+        "/Applications/Google Chrome.app because it can hijack your normal Chrome\n" +
+        "instance. Install the separate binary once:\n" +
+        "  mkdir -p ~/.browse-tool/chrome && cd ~/.browse-tool/chrome \\\n" +
+        "    && npx @puppeteer/browsers install chrome@stable\n" +
+        "Set CHROME_PATH only when you deliberately want a different browser binary.",
+    );
   }
   if (platform() === "linux") {
     for (const cmd of ["google-chrome", "chromium", "chromium-browser"]) {
