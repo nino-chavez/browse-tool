@@ -431,6 +431,7 @@ Expose `list_feedback`, `read_feedback`, `read_feedback_screenshot`, and `set_fe
 MCP is optional. Use `npm install --omit=optional` for CLI and extension use without the MCP SDK. A connected MCP server runs as a local process owned by its client. It does not send prompts into open conversations or start coding sessions.
 
 ```bash
+npm ci # Include the optional SDK to test the MCP adapter too.
 npm run test:feedback
 # Uses the existing automation browser; temporarily installs and removes the test extension and native host.
 BROWSE_PORT=9339 npm run test:extension
