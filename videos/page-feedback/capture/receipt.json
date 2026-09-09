@@ -1,0 +1,42 @@
+{
+  "viewport": {
+    "width": 1260,
+    "height": 643,
+    "dpr": 1
+  },
+  "events": [
+    {
+      "name": "region-mode",
+      "seconds": 1.825
+    },
+    {
+      "name": "region-selected",
+      "seconds": 3.623
+    },
+    {
+      "name": "comment-typed",
+      "seconds": 7.119
+    },
+    {
+      "name": "saved",
+      "seconds": 8.79
+    },
+    {
+      "name": "recording-ended",
+      "seconds": 22.001
+    }
+  ],
+  "batchId": "221145c1-64e4-4c95-8bd8-888012c7f1dc",
+  "inbox": "/var/folders/qm/r8v65ln91bv8_pl0c3x3pwnc0000gn/T/browse-demo-GuuPo2/inbox",
+  "comment": "Give these cards more space.",
+  "source": "actual extension, native host and browse-feedback CLI",
+  "synthetic": true,
+  "recordingDurationSeconds": 26.64,
+  "timingNote": "events are wall-clock timings; Puppeteer screencast uses its own timestamps. The encoded frame at 10s shows the typed draft; at 13s it shows the saved confirmation. Captions verified against decoded frames.",
+  "assetSha256": {
+    "saved-page.png": "54a04010ab5040d16c2f40144f0e7a3be2de090fa4c1e4c9cf70483d3774938e",
+    "saved-panel.png": "504229c5a624a33efd46e64878dd28c6cd4cdd0f6eb5ab47bfe4f237db423394",
+    "feedback.json": "dd54395ef5db5e41adaa5fde7836165cce1e911bb16634ef765fdfbd74527bf1",
+    "annotation.webm": "34ec92bdf09a03ac0bd57098d1bfeaa54320111d54dd0190b197993561de7f2e"
+  }
+}

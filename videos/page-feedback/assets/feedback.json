@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "id": "c007e862-efa3-4082-909c-1f611362aad0",
+  "createdAt": "2026-09-09T21:58:27.467Z",
+  "annotations": [
+    {
+      "id": "fd74e33f-b5af-46f3-b197-c576e7345ccd",
+      "kind": "region",
+      "comment": "Give these cards more space.",
+      "context": {
+        "url": "http://127.0.0.1:51112/",
+        "title": "Layout review · local demo",
+        "viewport": {
+          "width": 1260,
+          "height": 643,
+          "devicePixelRatio": 1
+        },
+        "scroll": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "target": {
+        "rect": {
+          "x": 38,
+          "y": 262,
+          "width": 690,
+          "height": 264
+        }
+      },
+      "status": "open",
+      "createdAt": "2026-09-09T21:58:36.888Z",
+      "screenshot": "screenshots/fd74e33f-b5af-46f3-b197-c576e7345ccd.png",
+      "attachment": {
+        "state": "snapshot",
+        "checkedAt": "2026-09-09T21:58:36.888Z"
+      }
+    }
+  ],
+  "updatedAt": "2026-09-09T21:58:36.889Z",
+  "title": "Layout review",
+  "nextOffset": null
+}

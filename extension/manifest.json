@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Page Feedback",
+  "version": "0.2.0",
+  "description": "Capture local page comments and screenshots for your coding agent.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "nativeMessaging"
+  ],
+  "action": {
+    "default_title": "Annotate this page",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArLbUvG5fouKY8T81QgnpWRmAm6IDe96raxwHIfwg6EP4KblJgGsWxr8AwBZmjYj5K/v2WCMcZI+NjY9n7N0nVYurIbKFcJfwpY+n6F6B6Sp7FK26zgGktqZ6wNjKSfOyeNKblQWns6n4js4CjVzFtjeNLZGczqQdYq4p9QEBA+2MMib6wu42Yi1svf6V+AsZq9ZyaTm9jH0q/BVejqfDATYInW28Z3qyAaGfpfn00K+tRgv23mZXhOgqub/jgcOWnHZG7ynFrToQq9L/+o8iipfkgmJhB9cWWMDmAgE6v2VelVTzcZDLx6fz/PCB0ZzjND6oLe6K37QpHceu6ftMPQIDAQAB"
+}

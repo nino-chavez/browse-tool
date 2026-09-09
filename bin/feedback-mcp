@@ -1,0 +1,12 @@
+#!/usr/bin/env node
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { FeedbackRepository } from "../lib/feedback-repository.js";
+import { createFeedbackServer } from "../lib/feedback-mcp.js";
+
+const index = process.argv.indexOf("--root");
+try {
+  const root = index >= 0 ? process.argv[index + 1] : null;
+  const repository = await new FeedbackRepository(root).init();
+  const server = createFeedbackServer(repository);
+  await server.connect(new StdioServerTransport());
+} catch (error) { console.error(error.message); process.exitCode = 1; }

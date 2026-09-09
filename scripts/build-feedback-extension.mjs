@@ -1,0 +1,11 @@
+import { mkdir, readFile, writeFile, copyFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
+const root = fileURLToPath(new URL("../", import.meta.url));
+const out = resolve(process.argv[2] || join(root, "extension/dist"));
+await mkdir(out, { recursive: true });
+for (const name of ["manifest.json", "background.js", "popup.html", "popup.js"]) await copyFile(join(root, "extension", name), join(out, name));
+const shared = (await readFile(join(root, "lib/annotation-overlay.js"), "utf8")).replace(/^export /gm, "");
+const content = await readFile(join(root, "extension/content.js"), "utf8");
+await writeFile(join(out, "overlay.js"), `// Generated from the shared annotation overlay. Edit lib/annotation-overlay.js.\n(() => {\n${shared}\n${content}\n})();\n`);
+console.log(out);

@@ -1,0 +1,28 @@
+import { mkdir, readFile, writeFile, chmod } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
+
+const args = process.argv.slice(2);
+const value = (flag) => { const index = args.indexOf(flag); return index >= 0 ? args[index + 1] : null; };
+if (!value("--out") || !value("--root")) throw new Error("Usage: node scripts/prepare-feedback.mjs --out directory --root feedback-directory");
+const output = resolve(value("--out")), inbox = resolve(value("--root"));
+const source = fileURLToPath(new URL("../", import.meta.url));
+await mkdir(output, { recursive: true });
+execFileSync(process.execPath, [join(source, "scripts/build-feedback-extension.mjs"), join(output, "chrome-extension")], { stdio: "ignore", timeout: 10000 });
+const manifest = JSON.parse(await readFile(join(source, "extension/manifest.json"), "utf8"));
+const extensionId = [...createHash("sha256").update(Buffer.from(manifest.key, "base64")).digest("hex").slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join("");
+const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
+const host = join(output, "feedback-native-host");
+await writeFile(host, `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(join(source, "bin/feedback-native"))} --root ${quote(inbox)} "$@"\n`);
+await chmod(host, 0o755);
+const hostName = "com.browse_tool.page_feedback";
+await writeFile(join(output, `${hostName}.json`), JSON.stringify({ name: hostName, description: "Local Page Feedback storage", path: host, type: "stdio", allowed_origins: [`chrome-extension://${extensionId}/`] }, null, 2) + "\n");
+await writeFile(join(output, "feedback"), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(join(source, "bin/browse-feedback"))} "$@" --root ${quote(inbox)}\n`);
+await chmod(join(output, "feedback"), 0o755);
+await writeFile(join(output, "claude-mcp.example.json"), JSON.stringify({ mcpServers: { "page-feedback": { command: process.execPath, args: [join(source, "bin/feedback-mcp"), "--root", inbox] } } }, null, 2) + "\n");
+await writeFile(join(output, "codex-mcp.example.toml"), `[mcp_servers.page-feedback]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ${JSON.stringify([join(source, "bin/feedback-mcp"), "--root", inbox])}\n`);
+await writeFile(join(output, "install-native-host"), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(join(source, "scripts/install-feedback-host.mjs"))} --package ${quote(output)} "$@"\n`);
+await chmod(join(output, "install-native-host"), 0o755);
+console.log(JSON.stringify({ output, inbox, extensionId, installed: false }, null, 2));

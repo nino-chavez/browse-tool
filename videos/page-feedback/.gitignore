@@ -1,0 +1,7 @@
+# Generated render and preview caches; source footage stays with the demo.
+renders/
+snapshots/
+.hyperframes/
+.media/
+node_modules/
+.transcode-cache/

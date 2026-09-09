@@ -1,0 +1,31 @@
+#!/usr/bin/env node
+import { writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { FeedbackRepository, nativeRequest } from "../lib/feedback-repository.js";
+
+const [command, ...argv] = process.argv.slice(2);
+const options = {};
+try {
+  if (command === "--help" || !command) {
+    console.log("browse-feedback list --root directory\nbrowse-feedback read --root directory --batch ID [--offset N] [--limit N]\nbrowse-feedback screenshot --root directory --batch ID --id ID --out file.png\nbrowse-feedback status --root directory --batch ID --id ID --status open|resolved\n\nWorks from Codex or Claude Code shell tools. No MCP server or browser connection required.");
+  } else {
+    if (argv.length % 2) throw new Error("Each option needs a value.");
+    for (let i = 0; i < argv.length; i += 2) {
+      if (!["--root", "--batch", "--id", "--out", "--offset", "--limit", "--status"].includes(argv[i])) throw new Error(`Unknown option: ${argv[i]}`);
+      options[argv[i].slice(2)] = argv[i + 1];
+    }
+    const repository = await new FeedbackRepository(options.root).init();
+    let result;
+    const paging = { offset: Number(options.offset || 0), limit: Number(options.limit || 20) };
+    if (command === "list") result = await nativeRequest(repository, { action: "list", ...paging });
+    else if (command === "read") result = await nativeRequest(repository, { action: "get", batchId: options.batch, ...paging });
+    else if (command === "status") result = await repository.status(options.batch, options.id, options.status);
+    else if (command === "screenshot") {
+      if (!options.out) throw new Error("--out is required for a screenshot copy.");
+      const path = resolve(options.out);
+      await writeFile(path, await repository.screenshot(options.batch, options.id), { flag: "wx", mode: 0o600 });
+      result = { path };
+    } else throw new Error(`Unknown command: ${command}`);
+    console.log(JSON.stringify(result, null, 2));
+  }
+} catch (error) { console.error(error.message); process.exitCode = 1; }

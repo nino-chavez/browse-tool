@@ -1,0 +1,29 @@
+#!/usr/bin/env node
+import { endianness } from "node:os";
+import { FeedbackRepository, nativeRequest } from "../lib/feedback-repository.js";
+
+const index = process.argv.indexOf("--root");
+const little = endianness() === "LE";
+const send = (value) => {
+  let body = Buffer.from(JSON.stringify(value));
+  if (body.length > 1000000) body = Buffer.from(JSON.stringify({ ok: false, error: "Response too large. Read a smaller page of comments." }));
+  const header = Buffer.alloc(4);
+  little ? header.writeUInt32LE(body.length) : header.writeUInt32BE(body.length);
+  process.stdout.write(Buffer.concat([header, body]));
+};
+try {
+  const repository = await new FeedbackRepository(index >= 0 ? process.argv[index + 1] : null).init();
+  let buffer = Buffer.alloc(0);
+  for await (const chunk of process.stdin) {
+    buffer = Buffer.concat([buffer, chunk]);
+    while (buffer.length >= 4) {
+      const size = little ? buffer.readUInt32LE(0) : buffer.readUInt32BE(0);
+      if (size > 17000000) throw new Error("Native message exceeds the 17 MB capture limit.");
+      if (buffer.length < size + 4) break;
+      const data = buffer.subarray(4, size + 4); buffer = buffer.subarray(size + 4);
+      try { send({ ok: true, result: await nativeRequest(repository, JSON.parse(data.toString("utf8"))) }); }
+      catch (error) { send({ ok: false, error: error.message }); }
+    }
+  }
+  if (buffer.length) throw new Error("Incomplete native message.");
+} catch (error) { console.error(error.message); process.exitCode = 1; }

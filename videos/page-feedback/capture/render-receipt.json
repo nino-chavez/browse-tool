@@ -1,0 +1,38 @@
+{
+  "programs": [],
+  "stream_groups": [],
+  "streams": [
+    {
+      "codec_name": "h264",
+      "codec_type": "video",
+      "width": 1920,
+      "height": 1080,
+      "pix_fmt": "yuv420p",
+      "r_frame_rate": "30/1"
+    }
+  ],
+  "format": {
+    "duration": "40.000000",
+    "size": "2237397"
+  },
+  "checks": "HyperFrames lint, runtime, layout, motion and contrast passed; zero errors or warnings; 42/42 contrast checks.",
+  "visualReview": "Decoded final MP4 frames inspected by author and independent reviewer; utility intro and observed save/read workflow passed.",
+  "scenes": [
+    {
+      "id": "00-context",
+      "start": 0,
+      "end": 10
+    },
+    {
+      "id": "01-annotate",
+      "start": 10,
+      "end": 24
+    },
+    {
+      "id": "02-handoff",
+      "start": 24,
+      "end": 40
+    }
+  ],
+  "sha256": "54bc7fd99fa9541be42adfe6f6a061a2e850ffc8c07bb47c96402b9c33bafed3"
+}

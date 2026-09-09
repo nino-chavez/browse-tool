@@ -1,0 +1,2 @@
+Page feedback. Element. Region. Whole page. What should change? Save comment. Comment and screenshot saved. Check attachments. Finish review.
+Local prototype. Chrome extension stores comments and screenshots locally. browse-feedback reads the saved target, URL, viewport, status, and screenshot paths from the same inbox. Optional MCP is not required for the CLI workflow.

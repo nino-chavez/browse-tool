@@ -4,3 +4,8 @@ node_modules/
 
 # Machine-local agent state: per-machine permission grants and session toggles.
 .claude/
+extension/dist/
+
+# Local annotation packages and feedback; never publish personal captures.
+.page-feedback/
+.browse-feedback/

@@ -5,7 +5,23 @@ import { connect, activeOrFirstPage, parseArgs } from "../lib/connect.js";
 // addresses a browser the same way. A flag that works on some commands and is
 // silently dropped by others is the wrong-browser failure this tool keeps
 // having, just with a friendlier surface.
-const args = parseArgs(process.argv.slice(2));
+const args = parseArgs(process.argv.slice(2), { annotate: "bool", help: "bool" });
+if (args.help) {
+  console.log("browse-pick [--port N]\nbrowse-pick --annotate [--out directory | --resume directory] [--port N]\n\nAnnotate elements, regions, or the whole page. Each saved comment includes a\nscreenshot and page context. Finish prints the path to feedback.md for handoff.");
+  process.exit(0);
+}
+if (args.annotate) {
+  const { annotate } = await import("../lib/annotations.js");
+  await annotate(args).catch((err) => {
+    console.error(`Annotation failed: ${err.message}`);
+    process.exitCode = 1;
+  });
+  process.exit(process.exitCode || 0);
+}
+if (args.out || args.resume) {
+  console.error("Use --annotate with --out or --resume.");
+  process.exit(1);
+}
 const browser = await connect(args.port);
 const page = await activeOrFirstPage(browser);
 

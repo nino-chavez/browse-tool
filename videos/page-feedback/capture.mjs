@@ -1,0 +1,73 @@
+// Records the real extension on the standing automation browser. Never touches everyday Chrome.
+import assert from 'node:assert/strict';
+import {mkdtemp, readFile, writeFile, mkdir, unlink, rename} from 'node:fs/promises';
+import {join, dirname} from 'node:path';
+import {tmpdir} from 'node:os';
+import {createServer} from 'node:http';
+import {once} from 'node:events';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+import puppeteer from 'puppeteer-core';
+import {readState,userDataDirOf} from '../../lib/connect.js';
+const here=dirname(fileURLToPath(import.meta.url)), source=join(here,'../..');
+const scratch=await mkdtemp(join(tmpdir(),'browse-demo-')), inbox=join(scratch,'inbox');
+const run=(file,args)=>execFileSync(process.execPath,[join(source,file),...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000});
+const prepared=JSON.parse(run('scripts/prepare-feedback.mjs',['--out',scratch,'--root',inbox]));
+const port=Number(process.env.BROWSE_PORT||9339), profile=userDataDirOf(readState(port)?.pid);
+assert.ok(profile,'Start the standing automation browser first.');
+const hostFile=join(profile,'NativeMessagingHosts/com.browse_tool.page_feedback.json');
+await mkdir(dirname(hostFile),{recursive:true});
+await writeFile(hostFile,await readFile(join(scratch,'com.browse_tool.page_feedback.json')),{flag:'wx'});
+const browser=await puppeteer.connect({browserURL:`http://127.0.0.1:${port}`,defaultViewport:null});
+const cdp=await browser.target().createCDPSession();
+const fixture=await readFile(join(here,'fixture.html'));
+const server=createServer((req,res)=>{res.setHeader('Content-Type','text/html');res.end(fixture)});
+server.listen(0,'127.0.0.1');await once(server,'listening');
+let page,popup,recorder,loaded=false;
+const panel='#__browse_annotations__ >>> ';
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+try{
+ const installed=await cdp.send('Extensions.getExtensions');
+ assert.ok(!installed.extensions.some(e=>e.id===prepared.extensionId),'Leave any pre-existing automation extension untouched.');
+ const {id}=await cdp.send('Extensions.loadUnpacked',{path:join(scratch,'chrome-extension')});loaded=true;
+ const {targetId}=await cdp.send('Target.createTarget',{url:'about:blank',newWindow:true,width:1260,height:820});
+ page=await(await browser.waitForTarget(t=>t._targetId===targetId)).asPage();page.setDefaultTimeout(10000);
+ await page.goto(`http://127.0.0.1:${server.address().port}/`);await page.bringToFront();
+ const {targetInfos}=await cdp.send('Target.getTargets',{filter:[{type:'tab',exclude:false}]});
+ const tab=targetInfos.find(t=>t.type==='tab'&&t.url===page.url());
+ await cdp.send('Extensions.triggerAction',{id,targetId:tab.targetId});
+ popup=await(await browser.waitForTarget(t=>t.url()===`chrome-extension://${id}/popup.html`)).asPage();
+ await popup.waitForSelector('#batches[data-loaded="true"]');await popup.type('#title','Layout review');await popup.click('#create');
+ await page.waitForSelector(panel+'#region');
+ await mkdir(join(here,'assets'),{recursive:true});
+ const viewport=await page.evaluate(()=>({width:innerWidth,height:innerHeight,dpr:devicePixelRatio}));
+ recorder=await page.screencast({path:join(here,'assets/annotation.webm'),scale:1});
+ const started=performance.now();const events=[];
+ const mark=name=>events.push({name,seconds:Number(((performance.now()-started)/1000).toFixed(3))});
+ await pause(1800);await page.click(panel+'#region');mark('region-mode');
+ await pause(600);await page.mouse.move(38,262);await page.mouse.down();
+ for(let step=1;step<=35;step++){await page.mouse.move(38+690*step/35,262+264*step/35);await pause(30)}
+ await page.mouse.up();mark('region-selected');await pause(1000);
+ await page.type(panel+'textarea','Give these cards more space.',{delay:85});mark('comment-typed');
+ await pause(1400);await page.click(panel+'#save');
+ await page.waitForFunction(()=>document.getElementById('__browse_annotations__')?.shadowRoot.querySelector('.message').textContent.includes('Comment and screenshot saved'));
+ mark('saved');
+ const {batches}=JSON.parse(run('bin/browse-feedback',['list','--root',inbox]));const batchId=batches[0].batchId;
+ const raw=run('bin/browse-feedback',['read','--root',inbox,'--batch',batchId]);
+ await writeFile(join(here,'assets/feedback.json'),raw);
+ const data=JSON.parse(raw);assert.equal(data.annotations[0].comment,'Give these cards more space.');
+ run('bin/browse-feedback',['screenshot','--root',inbox,'--batch',batchId,'--id',data.annotations[0].id,'--out',join(here,'assets/saved-page.png')]);
+ await page.screenshot({path:join(here,'assets/saved-panel.png')});
+ await pause(Math.max(0,22000-(performance.now()-started)));mark('recording-ended');
+ await recorder.stop();recorder=null;
+ // Puppeteer's stream lacks a duration/index; remux without changing any video frames.
+ execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-y','-i',join(here,'assets/annotation.webm'),'-c','copy',join(here,'capture/annotation-seekable.webm')],{stdio:['ignore','pipe','pipe'],timeout:30000});
+ await rename(join(here,'capture/annotation-seekable.webm'),join(here,'assets/annotation.webm'));
+ await writeFile(join(here,'capture/receipt.json'),JSON.stringify({viewport,events,batchId,inbox,comment:data.annotations[0].comment,source:'actual extension, native host and browse-feedback CLI',synthetic:true},null,2)+'\n');
+ console.log(JSON.stringify({viewport,events,batchId}));
+}finally{
+ if(recorder)await recorder.stop().catch(()=>{});
+ await popup?.close().catch(()=>{});await page?.close().catch(()=>{});
+ if(loaded)await cdp.send('Extensions.uninstall',{id:prepared.extensionId});
+ await cdp.detach();browser.disconnect();server.close();await unlink(hostFile);
+}
