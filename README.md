@@ -145,10 +145,11 @@ Launch Chrome with remote debugging. Profiles live persistently under `~/.browse
 
 ### Parallel sessions
 
-Independent Claude and Codex sessions all drive **one** Chrome on one profile. Each session gets its own tab, leased by session id (`CLAUDE_CODE_SESSION_ID` / `CODEX_COMPANION_SESSION_ID`, else `BROWSE_SESSION`, else the parent pid). Leases are one file per session under `~/.browse-tool/leases/` — deliberately not the shared state file. Every `browse-*` command is a separate process, and concurrent writes to one JSON would be a race.
+Independent Claude and Codex sessions all drive **one** Chrome on one profile. Each session gets its own tab, leased by session id (`BROWSE_SESSION` when set, else `CLAUDE_CODE_SESSION_ID` / `CODEX_COMPANION_SESSION_ID`, else the parent pid). Leases are one file per session under `~/.browse-tool/leases/` — deliberately not the shared state file. Every `browse-*` command is a separate process, and concurrent writes to one JSON would be a race.
 
 This matters because the old behaviour picked "whichever page looks active", and two independent processes provably selected the *same* tab — so parallel sessions silently drove each other's browser.
 
+- **Subagents of one session are not separate sessions.** They inherit their parent's `CLAUDE_CODE_SESSION_ID`, so they share one lease and one tab unless each sets its own `BROWSE_SESSION=<agent-slug>` on every command. Measured 2026-09-21 (four parallel subagents, one dev server each): `browse-tabs list` ownership markers were wrong, and one agent's `browse-eval` POST ran in another agent's tab against that agent's dev server. Parallel agents on local dev servers also need a hostname each (`<slug>.localhost:<port>`): cookies are scoped by host, not port, so on bare `localhost` the last agent to sign in is signed in on every port.
 - Cookies and logins are shared across sessions (same profile, same default context). That is the point: log in once.
 - `BROWSE_INCOGNITO=1` gives the session an isolated BrowserContext — its own cookies and storage, no second profile on disk. A session holds one lease *per isolation mode*, so flipping the flag moves between your normal tab and your incognito tab and back, keeping both. (With a single lease it silently handed back whichever tab already existed — no isolation, no warning.)
 - `BROWSE_SHARED_TAB=1` restores the old "active or first page" behaviour, for single-session use or driving a tab you opened by hand.
