@@ -19,6 +19,7 @@
     "browse-cdp": "./bin/browse-cdp"
   },
   "scripts": {
+    "test": "node --test test/*.test.mjs",
     "reader:check": "node tools/lib/encounter-audit.mjs --root=. --strict"
   },
   "dependencies": {

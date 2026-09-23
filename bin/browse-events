@@ -49,7 +49,7 @@ const count = bound("count");
 
 const sink = args.out ? createWriteStream(args.out, { flags: "a" }) : process.stdout;
 
-const browser = await connect(args.port);
+const browser = await connect(args.port, { timeCommand: false });
 const page = await activeOrFirstPage(browser);
 const cdp = await page.createCDPSession();
 

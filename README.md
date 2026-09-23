@@ -359,6 +359,8 @@ cat /tmp/docs-crawl/manifest.json
 - State file: `$TMPDIR/browse-tool-state-<port>.json` (port from `BROWSE_PORT`, else 9222)
 - Tab leases: `~/.browse-tool/leases/<session>.json`, plus `<session>.incognito.json` when `BROWSE_INCOGNITO=1`
 - If `browse-nav` says "Cannot connect", run `browse-start`.
+- **No command hangs silently.** Each command has a watchdog, `BROWSE_TIMEOUT` seconds (default 120, `0` turns it off). When it fires, the command exits `124` and says which phase stalled: `connect`, `tab lookup`, or `command`. `browse-events`, `browse-crawl` and `browse-pick` exist to run long, so only their connect and tab lookup are timed. A `connect` timeout also lists the page and iframe targets that nothing attached to. Those are what puppeteer's connect waits on, forever.
+- **The measured cause was a Chrome bubble, now skipped.** Signing a second Google account in (for example `authuser=1`) raises the "Separate Browsing?" bubble. Chrome reports it as a `page` target at `chrome://signin-dice-web-intercept.top-chrome/`, but no tab ever attaches it. Before the fix, every `browse-*` command waited on it, while raw CDP to the same tab answered at once. Commands now ignore `chrome://*.top-chrome/` targets, because they are browser UI, not tabs.
 - browse-tool launches from its own persistent `--user-data-dir`, so it never touches your real Chrome profile directly. Keep the profile named `shared` for long-lived authenticated QA sessions.
 - Override Chrome path with `CHROME_PATH=/path/to/chrome`.
 - **Why Chrome for Testing.** macOS identifies an app by the bundle it launched from, so a

@@ -6,7 +6,7 @@ import { connect, activeOrFirstPage, parseArgs } from "../lib/connect.js";
 // silently dropped by others is the wrong-browser failure this tool keeps
 // having, just with a friendlier surface.
 const args = parseArgs(process.argv.slice(2));
-const browser = await connect(args.port);
+const browser = await connect(args.port, { timeCommand: false });
 const page = await activeOrFirstPage(browser);
 
 try {
