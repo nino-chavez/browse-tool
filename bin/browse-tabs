@@ -5,6 +5,7 @@ import {
   sessionId,
   allLeases,
   isLive,
+  setPhase,
 } from "../lib/connect.js";
 
 // browse-tabs enumerates EVERY tab in the browser, across every session. That was
@@ -19,6 +20,7 @@ const args = parseArgs(process.argv.slice(2), { force: "bool" });
 const cmd = args._[0] ?? "list";
 
 const browser = await connect(args.port);
+setPhase("command");
 
 /** targetId of a page, via the public CDP surface. */
 async function targetIdOf(page) {

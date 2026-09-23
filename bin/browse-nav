@@ -3,6 +3,7 @@ import {
   connect,
   activeOrFirstPage,
   createSessionPage,
+  setPhase,
   parseArgs,
 } from "../lib/connect.js";
 
@@ -25,6 +26,7 @@ const browser = await connect(args.port);
 const page = args.new
   ? await createSessionPage(browser, { port: browser.__browsePort })
   : await activeOrFirstPage(browser);
+setPhase("command");
 
 try {
   await page.goto(url, {

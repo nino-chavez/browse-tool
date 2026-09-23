@@ -11,6 +11,9 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
+import { rmSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { WebSocketServer } from "ws";
 
 const BIN = fileURLToPath(new URL("../bin/", import.meta.url));
@@ -42,6 +45,8 @@ async function fakeBrowser(targets) {
       }
       if (method === "Target.getBrowserContexts") result = { browserContextIds: [] };
       if (method === "Target.getTargets") result = { targetInfos: infos };
+      // Acknowledge a new tab that never appears, so tab lookup waits forever.
+      if (method === "Target.createTarget") result = { targetId: "NEVERAPPEARS0000" };
       if (method === "Target.setDiscoverTargets") {
         for (const targetInfo of infos) {
           ws.send(JSON.stringify({ method: "Target.targetCreated", params: { targetInfo } }));
@@ -112,5 +117,18 @@ test("BROWSE_TIMEOUT rejects a value that is not seconds", async () => {
     assert.match(r.stderr, /BROWSE_TIMEOUT must be a number/);
   } finally {
     b.close();
+  }
+});
+
+test("a command that opts out of timing still times its tab lookup", async () => {
+  const b = await fakeBrowser([]);
+  try {
+    const r = await run("browse-pick", [], b.port, { BROWSE_TIMEOUT: "2" });
+    assert.equal(r.signal, null, "tab lookup was untimed; the outer bound killed it");
+    assert.equal(r.code, 124);
+    assert.match(r.stderr, /during tab lookup/);
+  } finally {
+    b.close();
+    rmSync(join(homedir(), ".browse-tool", "leases", "connect-hang-test.json"), { force: true });
   }
 });
