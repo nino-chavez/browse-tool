@@ -1,0 +1,314 @@
+<template>
+  <style>
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      color: #f0f6fc;
+      font-family: system-ui, sans-serif;
+    }
+
+    .clip {
+      position: absolute;
+      inset: 0;
+      background: #0d1117;
+    }
+
+    .handoff-heading {
+      position: absolute;
+      top: 76px;
+      left: 80px;
+      width: 1760px;
+      font-size: 58px;
+      font-weight: 600;
+      letter-spacing: -1.6px;
+      line-height: 1;
+    }
+
+    .handoff-heading-accent {
+      color: #3fb950;
+    }
+
+    .handoff-panel-label,
+    .handoff-source-label,
+    .handoff-overlay-label {
+      color: #8b949e;
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    .handoff-command-card {
+      position: absolute;
+      top: 221px;
+      left: 80px;
+      width: 710px;
+      height: 230px;
+      box-sizing: border-box;
+      padding: 28px 30px;
+      border: 1px solid #30363d;
+      border-radius: 14px;
+      background: #161b22;
+    }
+
+    .handoff-command {
+      margin-top: 24px;
+      color: #f0f6fc;
+      font-family: ui-monospace, monospace;
+      font-size: 28px;
+      line-height: 1.55;
+      white-space: pre;
+    }
+
+    .handoff-prompt { color: #3fb950; }
+    .handoff-variable { color: #79c0ff; }
+
+    .handoff-result-card {
+      position: absolute;
+      top: 477px;
+      left: 80px;
+      width: 710px;
+      min-height: 292px;
+      box-sizing: border-box;
+      padding: 28px 30px;
+      border: 1px solid #30363d;
+      border-left: 3px solid #3fb950;
+      border-radius: 14px;
+      background: rgba(22, 27, 34, 0.96);
+    }
+
+    .handoff-result-lines {
+      margin-top: 22px;
+      font-family: ui-monospace, monospace;
+      font-size: 25px;
+      line-height: 1.6;
+    }
+
+    .handoff-result-line {
+      min-height: 40px;
+      color: #f0f6fc;
+    }
+
+    .handoff-result-value-line {
+      display: block;
+      padding-left: 20px;
+    }
+
+    .handoff-key { color: #8b949e; }
+    .handoff-value { color: #f0f6fc; }
+    .handoff-open { color: #3fb950; }
+
+    .handoff-sequence-read {
+      position: absolute;
+      left: 912px;
+      top: 170px;
+      color: #3fb950;
+      font-family: ui-monospace, monospace;
+      font-size: 20px;
+      opacity: 0;
+    }
+
+    .handoff-shot {
+      position: absolute;
+      top: 218px;
+      left: 900px;
+      width: 857px;
+      height: 437px;
+      border: 1px solid #30363d;
+      border-radius: 14px;
+      background: #161b22;
+      box-shadow: 0 28px 64px rgba(0, 0, 0, 0.34);
+      overflow: hidden;
+      opacity: 0;
+    }
+
+    .handoff-shot img {
+      display: block;
+      width: 857px;
+      height: 437px;
+      object-fit: fill;
+    }
+
+    .handoff-source-label {
+      color: #f0f6fc;
+      position: absolute;
+      top: 15px;
+      left: 18px;
+      padding: 8px 11px;
+      border: 1px solid rgba(240, 246, 252, 0.24);
+      border-radius: 6px;
+      background: rgba(13, 17, 23, 0.84);
+    }
+
+    .handoff-selection {
+      position: absolute;
+      left: 25.84px;
+      top: 178.16px;
+      width: 469.2px;
+      height: 179.52px;
+      box-sizing: border-box;
+      border: 3px solid #3fb950;
+      background: rgba(63, 185, 80, 0.12);
+      opacity: 0;
+    }
+
+    .handoff-overlay-label {
+      position: absolute;
+      top: -40px;
+      left: -3px;
+      padding: 7px 10px;
+      border: 1px solid #3fb950;
+      border-radius: 6px 6px 6px 0;
+      background: #0d1117;
+      color: #f0f6fc;
+      font-size: 15px;
+      letter-spacing: 0.7px;
+      white-space: nowrap;
+    }
+
+    .handoff-travel {
+      position: absolute;
+      top: 700px;
+      left: 900px;
+      width: 857px;
+      color: #f0f6fc;
+      font-size: 29px;
+      line-height: 1.35;
+    }
+
+    .handoff-travel strong { color: #3fb950; font-weight: 600; }
+
+    .handoff-footer-rule {
+      position: absolute;
+      top: 806px;
+      left: 80px;
+      width: 1677px;
+      height: 1px;
+      background: #30363d;
+    }
+
+    .handoff-footer {
+      position: absolute;
+      top: 838px;
+      left: 80px;
+      right: 80px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .handoff-footer-main {
+      color: #f0f6fc;
+      font-size: 27px;
+      font-weight: 600;
+    }
+
+    .handoff-footer-sub {
+      margin-top: 8px;
+      color: #8b949e;
+      font-size: 20px;
+    }
+
+    .handoff-brand {
+      text-align: right;
+    }
+
+    .handoff-brand-name {
+      color: #f0f6fc;
+      font-family: ui-monospace, monospace;
+      font-size: 30px;
+      font-weight: 600;
+    }
+
+    .handoff-brand-note {
+      margin-top: 8px;
+      color: #8b949e;
+      font-size: 17px;
+    }
+  </style>
+
+  <div id="root" data-composition-id="02-handoff" data-duration="16" data-width="1920" data-height="1080">
+    <div id="handoff-ground" class="clip" data-start="0" data-duration="16" data-track-index="0">
+    </div>
+
+    <div class="handoff-heading">Read the saved review <span class="handoff-heading-accent">with one command.</span></div>
+
+    <section class="handoff-command-card" id="handoff-command-card">
+      <div class="handoff-panel-label">Read a review from your local inbox</div>
+      <div class="handoff-command"><span class="handoff-prompt">$</span> browse-feedback read \
+  --root <span class="handoff-variable">&quot;$INBOX&quot;</span> --batch <span class="handoff-variable">&quot;$BATCH&quot;</span></div>
+    </section>
+
+    <section class="handoff-result-card" id="handoff-result-card">
+      <div class="handoff-panel-label">Actual CLI result · excerpt</div>
+      <div class="handoff-result-lines">
+        <div class="handoff-result-line" id="handoff-line-comment"><span class="handoff-key">comment:</span><span class="handoff-value handoff-result-value-line">&quot;Give these cards more space.&quot;</span></div>
+        <div class="handoff-result-line" id="handoff-line-kind"><span class="handoff-key">kind:</span> <span class="handoff-value">region</span></div>
+        <div class="handoff-result-line" id="handoff-line-rect"><span class="handoff-key">rect:</span> <span class="handoff-value">x38, y262, width690, height264</span></div>
+        <div class="handoff-result-line" id="handoff-line-status"><span class="handoff-key">status:</span> <span class="handoff-open">open</span></div>
+      </div>
+    </section>
+
+
+
+    <section class="handoff-shot" id="handoff-shot">
+      <img src="assets/saved-page.png" alt="Original saved screenshot" />
+      <div class="handoff-source-label">Screenshot retrieved by CLI</div>
+      <div class="handoff-selection" id="handoff-selection">
+        <div class="handoff-overlay-label">Selection overlay from saved coordinates</div>
+      </div>
+    </section>
+
+    <div class="handoff-travel" id="handoff-travel"><strong>The same note. The exact region.</strong> The original screenshot.</div>
+
+    <div class="handoff-footer-rule" id="handoff-footer-rule"></div>
+    <footer class="handoff-footer" id="handoff-footer">
+      <div>
+        <div class="handoff-footer-main">Chrome extension + local files + CLI</div>
+        <div class="handoff-footer-sub">MCP optional · Saved locally on your Mac</div>
+      </div>
+      <div class="handoff-brand">
+        <div class="handoff-brand-name">browse-tool</div>
+        <div class="handoff-brand-note">Local demo · synthetic page</div>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (() => {
+      const tl = gsap.timeline({ paused: true });
+      const CONTENT = [
+        { key: "comment", body: "Give these cards more space.", hold: 0.62 },
+        { key: "kind", body: "region", hold: 0.55 },
+        { key: "rect", body: "x38, y262, width690, height264", hold: 0.65 },
+        { key: "status", body: "open", hold: 0.75 }
+      ];
+      const BASE_DURATION = 0.62;
+      const SEC_PER_CHAR = 0.04;
+      let cumulative = 0;
+      const TIMELINE = CONTENT.map((entry) => {
+        const start = cumulative;
+        cumulative += BASE_DURATION + entry.body.length * SEC_PER_CHAR + entry.hold;
+        return { ...entry, start, end: cumulative };
+      });
+      tl.fromTo(".handoff-heading", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 0)
+        .fromTo("#handoff-command-card", { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.65)
+        .fromTo("#handoff-result-card", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 2.95)
+        .set("#handoff-shot", { opacity: 1 }, 3.15)
+        .fromTo("#handoff-line-comment", { opacity: 0, x: -14 }, { opacity: 1, x: 0, duration: 0.38, ease: "power3.out" }, 3 + TIMELINE[0].start)
+        .fromTo("#handoff-line-kind", { opacity: 0, x: -14 }, { opacity: 1, x: 0, duration: 0.38, ease: "power3.out" }, 3 + TIMELINE[1].start)
+        .fromTo("#handoff-line-rect", { opacity: 0, x: -14 }, { opacity: 1, x: 0, duration: 0.38, ease: "power3.out" }, 3 + TIMELINE[2].start)
+        .fromTo("#handoff-line-status", { opacity: 0, x: -14 }, { opacity: 1, x: 0, duration: 0.38, ease: "power3.out" }, 3 + TIMELINE[3].start)
+        .fromTo("#handoff-selection", { opacity: 0 }, { opacity: 1, duration: 0.35, ease: "power3.out" }, 5.85)
+        .fromTo("#handoff-travel", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 8.25)
+        .fromTo("#handoff-footer-rule", { opacity: 0, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.55, ease: "power3.out" }, 11)
+        .fromTo("#handoff-footer", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.65, ease: "power3.out" }, 11.22)
+        ;
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["02-handoff"] = tl;
+    })();
+  </script>
+</template>

@@ -2,7 +2,21 @@
 
 <img src="assets/readme/hero.svg" alt="browse-tool: a coding agent drives Chrome from bash — browse-start, browse-nav, browse-eval returning &quot;Hacker News&quot; — costing zero context up front, versus the 13.7k (Playwright MCP) and 18.0k (Chrome DevTools MCP) an equivalent MCP loads in every session." width="100%">
 
-Minimal Bash-invokable browser tools for coding agents. Twelve small CLI scripts drive a real Chrome — navigate, run JS, screenshot, scrape to markdown, crawl, stream CDP events. An MCP equivalent loads 13–18k tokens of schema in every session. These commands cost nothing until browser work starts, and then the agent reads a couple hundred tokens for the command it needs. Agents lean on standard DOM/JS knowledge instead of memorizing tool schemas.
+Browser automation and page feedback for coding agents. Small shell commands navigate Chrome, inspect pages, capture screenshots, and extract content. The Page Feedback extension lets you point at a page and leave comments your agent can read from local files.
+
+## Page Feedback
+
+A comment like “give these cards more space” needs a target. Page Feedback saves the comment with the page URL, selected element or region, and an original screenshot. Your agent can inspect that context instead of guessing which part of the page you meant.
+
+[Watch the demo](videos/page-feedback/demo.mp4) · [Set up the extension](#chrome-extension) · [Use the CLI](#browse-feedback)
+
+[![Page Feedback with a selected region and comment on a synthetic practice page](assets/readme/page-feedback.png)](videos/page-feedback/demo.mp4)
+
+Choose an **Element**, draw a **Region**, or comment on the **Whole page**. Save the note, then give Codex or Claude Code the local feedback launcher and review name. The agent can read comments, open their screenshots, and mark them resolved after checking a fix.
+
+The extension works in your everyday Chrome profile. It needs no debugging port, separate desktop app, or always-running server. Chrome starts a small native helper only when needed. MCP is optional; the CLI is the simplest handoff.
+
+The current extension setup is for **macOS, Google Chrome, and Node.js 20+**. It is loaded unpacked, not installed from the Chrome Web Store. The demo uses a synthetic practice page.
 
 Inspired by Mario Zechner's [What if you don't need MCP at all?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/).
 
@@ -10,7 +24,7 @@ Inspired by Mario Zechner's [What if you don't need MCP at all?](https://marioze
 
 - Playwright MCP ≈ 13.7k tokens of tool schema, always loaded.
 - Chrome DevTools MCP ≈ 18.0k tokens.
-- browse-tool: zero tokens up front. This README (≈5k tokens total) is read on demand, and usually only the entry for the command at hand.
+- browse-tool: zero tokens up front. This README is read on demand, usually only the entry for the command at hand.
 - Outputs pipe, save, and compose with ordinary shell tools.
 - Adding a command is a single file — no protocol, no rebuild, no restart.
 
@@ -47,7 +61,7 @@ across two repos, a change to that file breaks the other side silently and no te
 catches it. Bundled, it is one change. Docker is required only if you use it;
 nothing else in this repo depends on it.
 
-Every `browse-*` command works against a running box unchanged:
+Every browser command works against a running box unchanged:
 
 ```bash
 browser-box start --profile social      # CDP on 9400
@@ -66,7 +80,7 @@ keystrokes, followed by a wait for the link preview to attach.
 ## Requirements
 
 - Node.js ≥ 20
-- Chrome for Testing, installed once into `~/.browse-tool/chrome` (see below). On macOS,
+- Chrome for Testing for the browser automation commands, installed once into `~/.browse-tool/chrome` (see below). On macOS,
   browse-tool requires it so its browsers never share an app identity with your normal
   Chrome — see "Why Chrome for Testing" under Notes. It refuses to fall back silently;
   `CHROME_PATH` is an explicit override only.
@@ -105,13 +119,13 @@ Then `/add-dir <path-to-browse-tool>` in Claude Code so the agent can `@README.m
 
 ## How it works
 
-<img src="assets/readme/how-it-works.svg" alt="browse-start launches one long-lived Chrome (remote debugging on :9222, recorded in a per-port state file under TMPDIR); browse-stop kills it. Every other command is a thin client that reads the state file for its port and drives its own leased tab in the same browser, grouped as NAVIGATE (browse-nav, browse-tabs), INSPECT (browse-eval, browse-screenshot, browse-shot, browse-pick), EXTRACT (browse-markdown, browse-crawl), and OBSERVE (browse-events, browse-cdp)." width="100%">
+<img src="assets/readme/how-it-works.svg" alt="browse-start launches one long-lived Chrome (remote debugging on :9222, recorded in a per-port state file under TMPDIR); browse-stop kills it. Every other browser command is a thin client that reads the state file for its port and drives its own leased tab in the same browser, grouped as NAVIGATE (browse-nav, browse-tabs), INSPECT (browse-eval, browse-screenshot, browse-shot, browse-pick), EXTRACT (browse-markdown, browse-crawl), and OBSERVE (browse-events, browse-cdp)." width="100%">
 
-`browse-start` launches one long-lived Chrome with remote debugging on `:9222` and records it in `$TMPDIR/browse-tool-state-<port>.json`. Every other command is a thin client: it reads the state file for its port (`BROWSE_PORT`, else 9222), connects to the same browser, and drives its own leased tab. Navigation, evaluation, screenshots, scraping, and event streams all share one persistent browser and one logged-in profile, while parallel sessions stay off each other's tabs. `browse-stop` kills the browser and clears the state.
+`browse-start` launches one long-lived Chrome with remote debugging on `:9222` and records it in `$TMPDIR/browse-tool-state-<port>.json`. Every other browser command is a thin client: it reads the state file for its port (`BROWSE_PORT`, else 9222), connects to the same browser, and drives its own leased tab. Navigation, evaluation, screenshots, scraping, and event streams all share one persistent browser and one logged-in profile, while parallel sessions stay off each other's tabs. `browse-stop` kills the browser and clears the state.
 
 ## Commands
 
-Every command below connects to the Chrome that `browse-start` launched (see [How it works](#how-it-works)).
+Browser commands connect to the Chrome that `browse-start` launched (see [How it works](#how-it-works)). `browse-feedback` reads local files and needs no browser connection.
 
 ### browse-start
 
@@ -131,10 +145,11 @@ Launch Chrome with remote debugging. Profiles live persistently under `~/.browse
 
 ### Parallel sessions
 
-Independent Claude and Codex sessions all drive **one** Chrome on one profile. Each session gets its own tab, leased by session id (`CLAUDE_CODE_SESSION_ID` / `CODEX_COMPANION_SESSION_ID`, else `BROWSE_SESSION`, else the parent pid). Leases are one file per session under `~/.browse-tool/leases/` — deliberately not the shared state file. Every `browse-*` command is a separate process, and concurrent writes to one JSON would be a race.
+Independent Claude and Codex sessions all drive **one** Chrome on one profile. Each session gets its own tab, leased by session id (`BROWSE_SESSION` when set, else `CLAUDE_CODE_SESSION_ID` / `CODEX_COMPANION_SESSION_ID`, else the parent pid). Leases are one file per session under `~/.browse-tool/leases/` — deliberately not the shared state file. Every `browse-*` command is a separate process, and concurrent writes to one JSON would be a race.
 
 This matters because the old behaviour picked "whichever page looks active", and two independent processes provably selected the *same* tab — so parallel sessions silently drove each other's browser.
 
+- **Subagents of one session are not separate sessions.** They inherit their parent's `CLAUDE_CODE_SESSION_ID`, so they share one lease and one tab unless each sets its own `BROWSE_SESSION=<agent-slug>` on every command. Measured 2026-09-21 (four parallel subagents, one dev server each): `browse-tabs list` ownership markers were wrong, and one agent's `browse-eval` POST ran in another agent's tab against that agent's dev server. Parallel agents on local dev servers also need a hostname each (`<slug>.localhost:<port>`): cookies are scoped by host, not port, so on bare `localhost` the last agent to sign in is signed in on every port.
 - Cookies and logins are shared across sessions (same profile, same default context). That is the point: log in once.
 - `BROWSE_INCOGNITO=1` gives the session an isolated BrowserContext — its own cookies and storage, no second profile on disk. A session holds one lease *per isolation mode*, so flipping the flag moves between your normal tab and your incognito tab and back, keeping both. (With a single lease it silently handed back whichever tab already existed — no isolation, no warning.)
 - `BROWSE_SHARED_TAB=1` restores the old "active or first page" behaviour, for single-session use or driving a tab you opened by hand.
@@ -315,7 +330,113 @@ Prefer the task commands when one fits — `browse-eval` over `Runtime.evaluate`
 
 ### browse-pick
 
+    browse-pick [--port N]
+    browse-pick --annotate [--out directory | --resume directory] [--port N]
+
 Enable an interactive element picker in the active tab. Hover highlights elements, click to pick, Cmd/Ctrl+click to add multiple, Enter to finish, Esc to cancel. Returns JSON with tag, id, class, text, html, bounding rect, and a heuristic selector for each picked element. Use this when you need the human to point at something instead of guessing at selectors.
+
+With `--annotate`, leave comments on elements, drawn regions, or the whole page. Each saved comment includes an original viewport screenshot and page context.
+
+- `--out directory`: create a new feedback directory. Existing directories are refused. Defaults to a unique directory under `.browse-feedback/` in the current project.
+- `--resume directory`: reopen a saved batch, add comments, and mark comments resolved or reopen them.
+- `--port N`: use the same browser port as the other commands. The calling session's tab lease still applies.
+- **Save comment** writes immediately. **Finish review** prints the absolute path to `feedback.md` for handoff to your agent. Ctrl+C keeps saved comments.
+- `feedback.json` holds exact comments, URLs, viewport size, scroll position, element details, status, and screenshot paths. `feedback.md` is the readable copy.
+- **Check attachments** flags missing, ambiguous, or changed elements as stale. A match checks markup and text; it does not prove visual correctness.
+- Region and whole-page comments refer to their original screenshots. Comments from other URLs remain unverified until that URL is open.
+- Screenshots include visible page content. Output stays local; share the feedback directory only when you intend to share that content.
+
+Use a visible browser window. Choose **Element**, then click a target; choose **Region**, then drag a box; or choose **Whole page**. Add your comment and save it. **Move panel** exposes content behind the panel. Escape cancels the current draft.
+
+Saved comments survive reloads. Unsaved drafts do not. This first version selects elements in the top document; use region comments for canvas or iframe content. It does not launch agents or send messages to desktop apps.
+
+```bash
+browse-pick --annotate --out ./review-feedback
+browse-pick --annotate --resume ./review-feedback
+```
+
+The browser tests use Node's built-in runner and the existing Puppeteer dependency. They open their own test tab in the running browser:
+
+```bash
+npm run test:annotations
+```
+
+### browse-feedback
+
+    browse-feedback list --root directory
+    browse-feedback read --root directory --batch ID [--offset N] [--limit N]
+    browse-feedback screenshot --root directory --batch ID --id ID --out file.png
+    browse-feedback status --root directory --batch ID --id ID --status open|resolved
+
+Read page feedback and update its status from Codex or Claude Code shell tools. No MCP connection is needed.
+
+- `--root directory`: the local feedback inbox shared with the extension. Batch directories sit directly inside it.
+- `--batch ID`: a directory ID returned by `list`. Paths outside the inbox and linked directories are refused.
+- `--offset N`, `--limit N`: page through batches or comments. Follow `nextOffset` until it is null; the maximum page size is 20.
+- `--id ID`: the comment ID returned by `read`.
+- `--out file.png`: copy an original screenshot for inspection. Existing files are refused.
+- `--status open|resolved`: update status without changing the comment or screenshot. Verify the rendered result before resolving feedback.
+
+### Chrome extension
+
+    node scripts/prepare-feedback.mjs --out package-directory --root feedback-directory
+
+Install from a stable checkout. The generated launchers reference its absolute path and your current Node executable.
+
+```bash
+git clone https://github.com/nino-chavez/browse-tool.git
+cd browse-tool
+npm ci --omit=optional
+node scripts/prepare-feedback.mjs \
+  --out .page-feedback \
+  --root "$HOME/Documents/Page Feedback"
+./.page-feedback/install-native-host
+```
+
+If you already cloned browse-tool, run `git pull --ff-only` there and start with `npm ci --omit=optional`.
+
+1. Open `chrome://extensions` in the Chrome profile where you want to annotate.
+2. Turn on **Developer mode**, select **Load unpacked**, and choose `browse-tool/.page-feedback/chrome-extension`.
+3. Pin **Page Feedback** from Chrome's Extensions menu. Open an HTTP or HTTPS page and click the extension.
+4. Start a named review. Choose **Element**, **Region**, or **Whole page**, add a comment, and select **Save comment**.
+5. Run `./.page-feedback/feedback list` from the checkout to confirm the review reached your local inbox.
+
+Give your agent this prompt, replacing the checkout path and review name:
+
+```text
+Use /absolute/path/to/browse-tool/.page-feedback/feedback to review "Homepage spacing".
+Run the launcher with `list`, find that review's batchId, then run `read --batch ID`.
+Open the saved screenshots with `screenshot --batch ID --id COMMENT_ID --out NEW_FILE.png`.
+Follow nextOffset if the results have another page.
+Use the comments and page context to make the requested changes in this project.
+Verify the result in the browser before using `status --batch ID --id COMMENT_ID --status resolved`.
+```
+
+The agent needs access to the local checkout and feedback inbox. Codex and Claude Code can call the launcher through their shell tools. The extension does not send prompts to open conversations or start coding sessions.
+
+- **Local storage:** comments, Markdown, and screenshots stay in your chosen inbox. Screenshots capture the visible viewport, including page content; “Whole page” describes the comment target, not a full-page scrolling capture.
+- **Browser permissions:** the extension requests `activeTab`, scripting, storage, and native messaging. It has no persistent access to every website.
+- **Reloads:** saved reviews reopen on same-origin reloads. Invoke the extension again after switching origins. Saved reviews remain after Chrome closes; unsaved drafts do not survive reloads.
+- **Selection limits:** element selection covers the top document. Use Region for canvas or iframe content. If the page moves before save, **Reselect target** keeps your typed comment.
+- **Install location:** the helper runs from `~/Library/Application Support/Page Feedback`. The installer registers it in Chrome's normal macOS native-host directory and refuses a conflicting installation.
+- **Updates:** pull the repo, reinstall dependencies, rerun the prepare command with the same paths, reload Page Feedback in `chrome://extensions`, then refresh the page. Keep the checkout and Node executable in place; moving them requires updating the existing native-host installation.
+
+The extension reuses the same annotation panel as `browse-pick --annotate`. Only the browser automation commands require Chrome for Testing; this extension setup uses your everyday Google Chrome.
+
+### Optional MCP adapter
+
+    node bin/feedback-mcp --root feedback-directory
+
+Expose `list_feedback`, `read_feedback`, `read_feedback_screenshot`, and `set_feedback_status` through a standard local MCP connection. The prepared package includes Codex TOML and Claude JSON examples. Merge the relevant entry into your existing configuration; do not replace the entire configuration file.
+
+MCP is optional. Use `npm install --omit=optional` for CLI and extension use without the MCP SDK. A connected MCP server runs as a local process owned by its client. It does not send prompts into open conversations or start coding sessions.
+
+```bash
+npm ci # Include the optional SDK to test the MCP adapter too.
+npm run test:feedback
+# Uses the existing automation browser; temporarily installs and removes the test extension and native host.
+BROWSE_PORT=9339 npm run test:extension
+```
 
 ## Recipes
 

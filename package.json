@@ -12,6 +12,7 @@
     "browse-screenshot": "./bin/browse-screenshot",
     "browse-shot": "./bin/browse-shot",
     "browse-pick": "./bin/browse-pick",
+    "browse-feedback": "./bin/browse-feedback",
     "browse-tabs": "./bin/browse-tabs",
     "browse-markdown": "./bin/browse-markdown",
     "browse-crawl": "./bin/browse-crawl",
@@ -20,13 +21,21 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
+    "test:annotations": "node --test tests/annotations.test.js",
+    "test:feedback": "node --test tests/feedback-integration.test.js",
+    "test:extension": "node --test tests/extension-browser.test.js",
+    "build:extension": "node scripts/build-feedback-extension.mjs",
     "reader:check": "node tools/lib/encounter-audit.mjs --root=. --strict"
   },
   "dependencies": {
-    "puppeteer-core": "^23.0.0",
     "@mozilla/readability": "^0.5.0",
     "jsdom": "^25.0.0",
-    "turndown": "^7.2.0"
+    "puppeteer-core": "^23.0.0",
+    "turndown": "^7.2.0",
+    "zod": "^4.6.0"
+  },
+  "optionalDependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0"
   },
   "engines": {
     "node": ">=20"

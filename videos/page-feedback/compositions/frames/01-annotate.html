@@ -1,0 +1,196 @@
+<template>
+  <style>
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      color: #f0f6fc;
+      font-family: system-ui, sans-serif;
+    }
+
+    .clip {
+      position: absolute;
+      display: block;
+    }
+
+    .annotate-ground {
+      inset: 0;
+      background: #0d1117;
+    }
+
+    .annotate-video-shell {
+      position: absolute;
+      left: 80px;
+      top: 112px;
+      width: 1760px;
+      height: 898px;
+      overflow: hidden;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      background: #161b22;
+      box-sizing: border-box;
+    }
+
+    .annotate-video {
+      left: 0;
+      top: 0;
+      width: 1760px;
+      height: 898px;
+      object-fit: fill;
+    }
+
+    .annotate-header {
+      position: absolute;
+      top: 30px;
+      left: 80px;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      color: #f0f6fc;
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      z-index: 2;
+    }
+
+    .annotate-header-separator {
+      width: 1px;
+      height: 24px;
+      background: #30363d;
+    }
+
+    .annotate-header-label {
+      color: #8b949e;
+      font-weight: 400;
+    }
+
+    .annotate-editorial-band {
+      position: absolute;
+      left: 80px;
+      right: 80px;
+      bottom: 20px;
+      height: 72px;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    .annotate-caption {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      margin: 0;
+      color: #f0f6fc;
+      font-size: 36px;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+      line-height: 1.05;
+      text-shadow: 0 2px 10px rgba(13, 17, 23, 0.92);
+      white-space: nowrap;
+    }
+
+    .annotate-footer {
+      position: absolute;
+      right: 0;
+      bottom: 4px;
+      color: #8b949e;
+      font-size: 18px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      line-height: 1;
+    }
+  </style>
+
+  <div id="root" data-composition-id="01-annotate" data-width="1920" data-height="1080" data-duration="14">
+    <div id="annotate-ground" class="clip annotate-ground" data-start="0" data-duration="14" data-track-index="0"></div>
+
+    <div class="annotate-video-shell" aria-label="Recorded Page feedback extension interaction">
+      <!-- approved frame video hoisted by assemble-index -->
+    </div>
+
+    <div class="annotate-header" aria-label="browse-tool Page feedback">
+      <span>browse-tool</span>
+      <span class="annotate-header-separator"></span>
+      <span class="annotate-header-label">Page feedback</span>
+    </div>
+
+    <div class="annotate-editorial-band" aria-live="off">
+      <p id="annotate-caption" class="annotate-caption">Point to what should change.</p>
+      <div class="annotate-footer">Local demo · synthetic page</div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const frameId = "01-annotate";
+      const video = document.getElementById("annotate-video");
+      const caption = document.getElementById("annotate-caption");
+
+      const CONTENT = [
+        { title: "Point to what should change.", hold: 4.0 },
+        { title: "Leave a note.", hold: 4.9 },
+        { title: "Save the comment and screenshot.", hold: 5.1 },
+      ];
+
+      let cumulative = 0;
+      const TIMELINE = CONTENT.map((entry) => {
+        const start = cumulative;
+        cumulative += entry.hold;
+        return { ...entry, start, end: cumulative };
+      });
+
+      const tl = gsap.timeline({ paused: true });
+      const driver = { t: 0 };
+      let lastTitle = "";
+
+      function entryAt(time) {
+        for (let index = TIMELINE.length - 1; index >= 0; index -= 1) {
+          if (time >= TIMELINE[index].start) return TIMELINE[index];
+        }
+        return TIMELINE[0];
+      }
+
+      tl.fromTo(
+        document.querySelector(".annotate-header"),
+        { opacity: 0, y: -12 },
+        { opacity: 1, y: 0, duration: 0.42, ease: "power3.out" },
+        0,
+      );
+      tl.fromTo(
+        document.querySelector(".annotate-footer"),
+        { opacity: 0 },
+        { opacity: 1, duration: 0.35, ease: "power3.out" },
+        0.15,
+      );
+
+      TIMELINE.forEach((entry) => {
+        tl.fromTo(
+          caption,
+          { opacity: 0, y: 18 },
+          { opacity: 1, y: 0, duration: 0.42, ease: "power3.out" },
+          entry.start,
+        );
+      });
+
+      tl.to(
+        driver,
+        {
+          t: 14,
+          duration: 14,
+          ease: "none",
+          onUpdate: () => {
+            const entry = entryAt(driver.t);
+            if (entry.title !== lastTitle) {
+              caption.textContent = entry.title;
+              lastTitle = entry.title;
+            }
+          },
+        },
+        0,
+      );
+      window.__timelines = window.__timelines || {};
+      window.__timelines[frameId] = tl;
+    })();
+  </script>
+</template>

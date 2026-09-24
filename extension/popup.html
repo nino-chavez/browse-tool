@@ -1,0 +1,14 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Page Feedback</title>
+<style>
+  body { width:320px;margin:0;padding:18px;box-sizing:border-box;font:14px/1.5 system-ui;color:#20252b;background:white; }
+  h1 { font-size:18px;margin:0 0 8px; } p { margin:8px 0 16px;color:#526171; } label { display:block;font-weight:600;margin:10px 0 4px; }
+  input,select,button { width:100%;box-sizing:border-box;font:inherit;padding:9px;border:1px solid #a7b3c1;border-radius:6px;background:#fff;color:#20252b; }
+  button { margin-top:10px;cursor:pointer; } button.primary { background:#185abc;color:white;border-color:#185abc; }
+  button:disabled { opacity:.55;cursor:default; } :focus-visible { outline:3px solid #185abc;outline-offset:2px; }
+  #status { white-space:pre-wrap;overflow-wrap:anywhere;margin-top:14px; } .divider { border-top:1px solid #dce2e8;margin-top:20px;padding-top:8px; }
+</style>
+<h1>Page Feedback</h1><p>Comment on this tab. Your screenshots and feedback stay in the local inbox.</p>
+<p id="tab-context" style="overflow-wrap:anywhere"></p>
+<form><label for="title">New review</label><input id="title" maxlength="200" placeholder="e.g. Checkout review" required><button class="primary" id="create">Start review</button></form>
+<div class="divider"><label for="batches">Continue a review</label><select id="batches"><option value="">Loading reviews…</option></select><button id="resume" disabled>Open on this tab</button></div>
+<div id="status" role="status" aria-live="polite"></div><script src="popup.js"></script></html>

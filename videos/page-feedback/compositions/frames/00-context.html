@@ -1,0 +1,27 @@
+<template>
+<style>
+#root{position:relative;width:1920px;height:1080px;overflow:hidden;color:#f0f6fc;font-family:system-ui,sans-serif}
+.clip{position:absolute;inset:0;background:#0d1117}
+.brand{position:absolute;left:80px;top:54px;font:28px monospace;color:#8b949e}
+.copy{position:absolute;left:80px;top:246px;width:930px}
+h1{font-size:80px;letter-spacing:-3px;line-height:1.1;font-weight:600;margin:0 0 38px}
+p{font-size:34px;line-height:1.4;max-width:850px;margin:0;color:#c9d1d9}
+.green{color:#3fb950}.preview{position:absolute;left:1080px;top:260px;width:760px;height:388px;overflow:hidden;border:1px solid #30363d;border-radius:10px;background:#f6f7f9}
+.preview img{width:760px;height:388px;display:block}.region{position:absolute;left:22.92px;top:158.03px;width:416.19px;height:159.24px;border:3px solid #185abc;box-sizing:border-box;background:#185abc0c}
+.note{position:absolute;left:1080px;top:680px;width:760px;border-left:3px solid #3fb950;padding:22px 24px;font-size:29px;line-height:1.4;background:#161b22;box-sizing:border-box}.label{font-size:20px;color:#8b949e;margin-bottom:8px}.footer{position:absolute;left:80px;bottom:64px;font-size:25px;color:#8b949e}
+</style>
+<div id="root" data-composition-id="00-context" data-width="1920" data-height="1080" data-duration="10">
+<div id="context-ground" class="clip" data-start="0" data-duration="10" data-track-index="0"></div>
+<div class="brand">browse-tool / Page feedback</div>
+<div class="copy"><h1 id="context-title">“Fix this” needs <span class="green">context.</span></h1><p id="context-body">Your coding agent needs the comment and the exact part of the page it refers to.</p></div>
+<div class="preview"><img src="assets/saved-page.png" alt="Practice page with two adjacent cards"><div id="context-region" class="region"></div></div>
+<div id="context-note" class="note"><div class="label">Your comment</div>Give these cards more space.</div>
+<div class="footer">Chrome extension · Local files · CLI · MCP optional</div>
+</div>
+<script>
+(()=>{const tl=gsap.timeline({paused:true});const title=document.getElementById('context-title'),body=document.getElementById('context-body');const driver={t:0};
+tl.fromTo('.brand',{opacity:0},{opacity:1,duration:.4},0).fromTo('.copy',{opacity:0,y:18},{opacity:1,y:0,duration:.6,ease:'power3.out'},0).fromTo('.preview',{opacity:0},{opacity:1,duration:.5},.5).fromTo('#context-region',{opacity:0},{opacity:1,duration:.4},1.8).fromTo('#context-note',{opacity:0,y:16},{opacity:1,y:0,duration:.5,ease:'power3.out'},2.4).fromTo('.footer',{opacity:0},{opacity:1,duration:.4},7.2);
+let phase=-1;tl.to(driver,{t:10,duration:10,ease:'none',onUpdate:()=>{const next=driver.t>=5?1:0;if(next===phase)return;phase=next;title.innerHTML=next?'Point. Comment. <span class="green">Hand it off.</span>':'“Fix this” needs <span class="green">context.</span>';body.textContent=next?'Keep the note, page URL and screenshot together in local files your agent can read.':'Your coding agent needs the comment and the exact part of the page it refers to.';}},0);
+window.__timelines=window.__timelines||{};window.__timelines['00-context']=tl;})();
+</script>
+</template>
