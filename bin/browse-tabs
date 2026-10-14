@@ -3,6 +3,8 @@ import {
   connect,
   parseArgs,
   sessionId,
+  ownedTabs,
+  closeSessionPages,
   allLeases,
   isLive,
   setPhase,
@@ -41,7 +43,7 @@ try {
   const me = sessionId();
   const owners = new Map(); // targetId -> session id holding a live lease
   for (const lease of allLeases()) {
-    if (lease.targetId && isLive(lease)) owners.set(lease.targetId, lease.id);
+    if (isLive(lease)) for (const tab of ownedTabs(lease)) owners.set(tab.targetId, lease.id);
   }
 
   if (cmd === "list") {
@@ -53,6 +55,9 @@ try {
       console.log(`${mark} [${i}] ${short}  ${pages[i].url()}  ${title}`);
     }
     console.log(`\n* = this session's tab, ~ = another session's, blank = unclaimed`);
+  } else if (cmd === "close-owned") {
+    const result = await closeSessionPages(browser, { port: browser.__browsePort });
+    console.log(`Closed ${result.closed} session-owned tab(s). Protected ${result.protected} tab(s) with another owner.`);
   } else if (cmd === "close") {
     const key = args._[1];
     if (key === undefined) {
@@ -88,7 +93,7 @@ try {
     await pages[idx].close();
     console.log(`Closed tab ${idx} (${ids[idx]?.slice(0, 8) ?? "unknown"}).`);
   } else {
-    console.error("Usage: browse-tabs [list | close <index|target-id> [--force]]");
+    console.error("Usage: browse-tabs [list | close-owned | close <index|target-id> [--force]]");
     process.exit(1);
   }
 } finally {

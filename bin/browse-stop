@@ -10,6 +10,7 @@ import {
   profileOf,
   clearLeasesForPort,
   allLeases,
+  ownedTabs,
   isLive,
   sessionId,
 } from "../lib/connect.js";
@@ -141,7 +142,8 @@ const browserPresent = targets.size > 0 || responds;
 // guard announced it was "Refusing to stop the Chrome on port N" for a browser
 // that was not there.
 const me = sessionId();
-const others = allLeases().filter((l) => isLive(l) && l.id !== me);
+const others = allLeases().filter((l) => isLive(l) && l.id !== me)
+  .flatMap(l => ownedTabs(l).length ? ownedTabs(l).map(t => ({ ...l, ...t })) : [l]);
 
 // Ask the browser which targets it actually has, so a port-less lease can be
 // attributed instead of assumed. Only when it cannot be asked does "unknown"
