@@ -30,6 +30,7 @@
   "dependencies": {
     "@mozilla/readability": "^0.5.0",
     "jsdom": "^25.0.0",
+    "proper-lockfile": "4.1.2",
     "puppeteer-core": "^23.0.0",
     "turndown": "^7.2.0",
     "zod": "^4.6.0"

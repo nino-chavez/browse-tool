@@ -145,7 +145,7 @@ Launch Chrome with remote debugging. Profiles live persistently under `~/.browse
 
 ### Parallel sessions
 
-Independent Claude and Codex sessions all drive **one** Chrome on one profile. Each session gets its own tab, leased by session id (`BROWSE_SESSION` when set, else `CLAUDE_CODE_SESSION_ID` / `CODEX_COMPANION_SESSION_ID`, else the parent pid). Leases are one file per session under `~/.browse-tool/leases/` — deliberately not the shared state file. Every `browse-*` command is a separate process, and concurrent writes to one JSON would be a race.
+Independent Claude and Codex sessions all drive **one** Chrome on one profile. Each session gets its own tab, leased by session id (`BROWSE_SESSION` when set, else `CLAUDE_CODE_SESSION_ID` / `CODEX_COMPANION_SESSION_ID` / `CODEX_THREAD_ID`, else the parent pid). Leases are one file per session under `~/.browse-tool/leases/` — deliberately not the shared state file. Every `browse-*` command is a separate process, and concurrent writes to one JSON would be a race.
 
 This matters because the old behaviour picked "whichever page looks active", and two independent processes provably selected the *same* tab — so parallel sessions silently drove each other's browser.
 
@@ -153,7 +153,12 @@ This matters because the old behaviour picked "whichever page looks active", and
 - Cookies and logins are shared across sessions (same profile, same default context). That is the point: log in once.
 - `BROWSE_INCOGNITO=1` gives the session an isolated BrowserContext — its own cookies and storage, no second profile on disk. A session holds one lease *per isolation mode*, so flipping the flag moves between your normal tab and your incognito tab and back, keeping both. (With a single lease it silently handed back whichever tab already existed — no isolation, no warning.)
 - `BROWSE_SHARED_TAB=1` restores the old "active or first page" behaviour, for single-session use or driving a tab you opened by hand.
-- `browse-nav --new` opens a tab *and* moves this session's lease onto it, so the following `browse-eval` / `browse-screenshot` reads the page you just navigated.
+- Reuse the same session id across turns. Do not use `--new` for a new round, URL, screenshot, or retry.
+- If your harness exposes no stable id, set one `BROWSE_SESSION=<chat-id>` on every command. A changing shell PID cannot identify a chat.
+- `browse-nav --new` is for work that needs two tabs open together. It selects the new tab and keeps ownership of earlier tabs.
+- When browser work ends, run `browse-tabs close-owned` with that same session id. It closes recorded tabs on the selected port, preserves other owners, and keeps Chrome running.
+- Keep a requested review tab open for the user. Cleanup is an explicit command, not an idle timer or a sweep of unknown tabs.
+- If the latest tab vanished, reuse an earlier surviving tab owned by this session. Never take another session's tab.
 - `browse-stop` stops **only what holds its target port**, and clears only the leases pointing at that browser.
 
 ### Ports: one browser per port, state keyed by port
@@ -248,9 +253,11 @@ Navigate the active tab (or a new one with `--new`). `https://` is auto-prepende
 
 ### browse-tabs
 
-    browse-tabs [list | close <index|target-id> [--force]]
+    browse-tabs [list | close-owned | close <index|target-id> [--force]]
 
 List open tabs with their URL/title, or close one. `list` shows a short target id and marks ownership: `*` this session's tab, `~` another session's, blank unclaimed. `close` accepts a target id (or unique prefix) as well as an index. Prefer the id: it is stable, whereas indices renumber when any session opens or closes a tab between your `list` and your `close`. Closing a tab held by another live session is refused unless you pass `--force`.
+
+`close-owned` closes only tabs recorded for the calling session on the selected port, including earlier `--new` tabs and incognito tabs. It clears their ownership records and leaves other ports alone. If these are Chrome's last tabs, it creates one unclaimed blank tab before closing them. Repeating cleanup is safe. Tabs created before ownership tracking was added cannot be identified retroactively; inspect them manually.
 
 ### browse-eval
 
