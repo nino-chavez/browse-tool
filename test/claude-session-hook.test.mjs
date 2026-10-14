@@ -39,3 +39,25 @@ test('invalid input cannot write shell code; missing env file fails visibly', ()
     assert.equal(missing.status,1); assert.match(missing.stderr,/unavailable/);
   } finally { rmSync(dir,{recursive:true,force:true}); }
 });
+
+
+test('nested Claude and Codex chats retain distinct browser identities', () => {
+  const dir = mkdtempSync(join(tmpdir(),'claude-browser-nested-'));
+  const envFile = join(dir,'env.sh');
+  const parent = {...process.env, CODEX_THREAD_ID:'parent-codex', CODEX_COMPANION_SESSION_ID:'parent-companion'};
+  delete parent.BROWSE_SESSION;
+  try {
+    const hookResult = run({session_id:'child-claude',hook_event_name:'SessionStart'}, {...parent,CLAUDE_ENV_FILE:envFile});
+    assert.equal(hookResult.status,0,hookResult.stderr);
+    for (const [overrides, expected] of [
+      [{},'child-claude'],
+      [{CODEX_THREAD_ID:'new-codex-worker'},'new-codex-worker'],
+      [{CODEX_COMPANION_SESSION_ID:'new-companion-worker'},'new-companion-worker'],
+      [{BROWSE_SESSION:'parallel-worker'},'parallel-worker'],
+    ]) {
+      const shell = spawnSync('/bin/bash',['-c',`source "$1"; node --input-type=module -e 'import {sessionId} from "${modulePath}"; console.log(sessionId())'`,'hook-test',envFile], {env:{...parent,...overrides},encoding:'utf8',timeout:5000,stdio:['ignore','pipe','pipe']});
+      assert.equal(shell.status,0,shell.stderr);
+      assert.equal(shell.stdout.trim(),expected);
+    }
+  } finally { rmSync(dir,{recursive:true,force:true}); }
+});

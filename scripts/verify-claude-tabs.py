@@ -8,7 +8,7 @@ args=parser.parse_args()
 repo=Path(__file__).resolve().parents[1]
 sid=str(uuid.uuid4())
 env=dict(os.environ,CLAUDE_GUARD_ROLE='readonly')
-for key in ['BROWSE_SESSION','CLAUDE_CODE_SESSION_ID','ANTHROPIC_API_KEY']: env.pop(key,None)
+for key in ['BROWSE_SESSION','CLAUDE_CODE_SESSION_ID','BROWSE_SHARED_TAB','BROWSE_INCOGNITO','ANTHROPIC_API_KEY']: env.pop(key,None)
 cmd=['claude','-p','--session-id',sid,'--input-format','stream-json','--output-format','stream-json','--verbose','--tools','Bash','--allowedTools','Bash(node:*)','--strict-mcp-config','{"mcpServers":{}}','--disable-slash-commands']
 if args.settings: cmd += ['--settings',args.settings]
 p=subprocess.Popen(cmd,cwd=repo,env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,bufsize=1)
