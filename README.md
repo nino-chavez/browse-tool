@@ -154,7 +154,9 @@ This matters because the old behaviour picked "whichever page looks active", and
 - `BROWSE_INCOGNITO=1` gives the session an isolated BrowserContext — its own cookies and storage, no second profile on disk. A session holds one lease *per isolation mode*, so flipping the flag moves between your normal tab and your incognito tab and back, keeping both. (With a single lease it silently handed back whichever tab already existed — no isolation, no warning.)
 - `BROWSE_SHARED_TAB=1` restores the old "active or first page" behaviour, for single-session use or driving a tab you opened by hand.
 - Reuse the same session id across turns. Do not use `--new` for a new round, URL, screenshot, or retry.
-- If your harness exposes no stable id, set one `BROWSE_SESSION=<chat-id>` on every command. A changing shell PID cannot identify a chat.
+- Claude Code receives its real conversation ID through `bin/browse-session-hook`, registered for `SessionStart` and `CwdChanged` in the shared dotfiles settings. It appends `CLAUDE_CODE_SESSION_ID` to Claude’s supported environment file, so each Bash command keeps the same identity.
+- Codex supplies `CODEX_THREAD_ID` directly. Neither agent needs a new session name for a new turn.
+- An explicit `BROWSE_SESSION=<agent-id>` overrides either chat ID for parallel workers. Other harnesses must supply a stable id; a changing shell PID cannot identify a chat.
 - `browse-nav --new` is for work that needs two tabs open together. It selects the new tab and keeps ownership of earlier tabs.
 - When browser work ends, run `browse-tabs close-owned` with that same session id. It closes recorded tabs on the selected port, preserves other owners, and keeps Chrome running.
 - Keep a requested review tab open for the user. Cleanup is an explicit command, not an idle timer or a sweep of unknown tabs.
