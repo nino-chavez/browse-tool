@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+"""Bind Claude shell commands to its real conversation identity."""
+import json
+import os
+import re
+import sys
+
+
+def main():
+    try:
+        payload = json.load(sys.stdin)
+    except (ValueError, OSError):
+        print('browse-session-hook: invalid hook input', file=sys.stderr)
+        return 1
+    event = payload.get('hook_event_name')
+    if event not in ('SessionStart', 'CwdChanged'):
+        return 0
+    session_id = payload.get('session_id')
+    env_file = os.environ.get('CLAUDE_ENV_FILE')
+    if not isinstance(session_id, str) or not re.fullmatch(r'[A-Za-z0-9._-]{1,64}', session_id):
+        print('browse-session-hook: missing or invalid conversation ID', file=sys.stderr)
+        return 1
+    if not env_file:
+        print('browse-session-hook: CLAUDE_ENV_FILE is unavailable; tab identity was not initialized', file=sys.stderr)
+        return 1
+    try:
+        # Append to preserve assignments made by other SessionStart hooks.
+        # Only this non-secret, validated identifier is written. An explicit
+        # BROWSE_SESSION still takes precedence for parallel child sessions.
+        with open(env_file, 'a', encoding='utf-8') as f:
+            f.write(f"\nexport CLAUDE_CODE_SESSION_ID='{session_id}'\n")
+    except OSError as exc:
+        print(f'browse-session-hook: cannot persist conversation ID: {exc}', file=sys.stderr)
+        return 1
+    if event == 'SessionStart':
+        print(json.dumps({'hookSpecificOutput': {
+            'hookEventName': 'SessionStart',
+            'additionalContext': 'Browser shell commands now use this conversation ID automatically. Follow browse-tool README: reuse owned tabs across turns; close-owned when browser work finishes, while preserving any review tab the user requested.'
+        }}))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
