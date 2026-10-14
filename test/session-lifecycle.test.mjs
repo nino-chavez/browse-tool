@@ -28,7 +28,10 @@ function fakeBrowser() {
     newPage: () => makePage(),
     browserContexts: () => contexts,
     createBrowserContext: async () => {
-      const ctx = { id: `CTX${contexts.length}`, newPage: () => makePage(ctx.id) };
+      const ctx = { id: `CTX${contexts.length}`, newPage: () => makePage(ctx.id),
+        pages: async () => tabs.filter(p => !p.closed && p.contextId === ctx.id),
+        close: async () => { contexts.splice(contexts.indexOf(ctx), 1); },
+      };
       contexts.push(ctx);
       return ctx;
     },
@@ -72,15 +75,16 @@ test('reuse, explicit extra tabs, cleanup, isolation and unrelated tabs', async 
     const result = await sessions.closeSessionPages(b, { port: 9222 });
     assert.equal(result.closed, 2);
     assert.equal(a.closed, true); assert.equal(extra.closed, true); assert.equal(incognito.closed, true);
+    assert.equal(b.browserContexts().length, 0, 'empty owned incognito context is released');
     assert.equal(remote.closed, false); assert.equal(unrelated.closed, false); assert.equal(other.closed, false);
     assert.equal(otherOwned.closed, false);
     assert.ok(allLeases().some(l => l.id === id && l.port === 9333));
     assert.equal(allLeases().filter(l => l.id === id && l.port === 9222).length, 0);
     const again = await sessions.closeSessionPages(b, { port: 9222 });
     assert.equal(again.closed, 0, 'cleanup is idempotent');
-    sessions.clearLeasesForPort(9222, { sessionOnly: true });
+    await sessions.clearLeasesForPort(9222, { sessionOnly: true });
     assert.ok(allLeases().some(l => l.id === id && l.port === 9333), 'stop cleanup must preserve another port');
-    sessions.clearLeasesForPort(9333, { sessionOnly: true });
+    await sessions.clearLeasesForPort(9333, { sessionOnly: true });
     assert.equal(allLeases().filter(l => l.id === id).length, 0);
   } finally {
     for (const l of allLeases().filter(l => l.id.startsWith(id))) rmSync(join(homedir(), '.browse-tool', 'leases', l.file), { force: true });
@@ -99,6 +103,24 @@ test('cleanup keeps Chrome alive when every tab belongs to this session', async 
     assert.equal(own.closed, true);
     assert.equal((await b.pages()).length, 1);
     assert.equal(allLeases().filter(l => l.id === id).length, 0);
+  } finally {
+    for (const l of allLeases().filter(l => l.id === id)) rmSync(join(homedir(), '.browse-tool','leases',l.file), {force:true});
+    if (old === undefined) delete process.env.BROWSE_SESSION; else process.env.BROWSE_SESSION = old;
+  }
+});
+
+
+test('concurrent commands retain every owned tab for cleanup', async () => {
+  const id = `concurrent-tabs-test-${process.pid}`;
+  const old = process.env.BROWSE_SESSION; process.env.BROWSE_SESSION = id;
+  const b = fakeBrowser();
+  try {
+    const pages = await Promise.all(Array.from({ length: 12 }, () => createSessionPage(b, { port: 9222, incognito: false })));
+    const lease = allLeases().find(l => l.id === id);
+    assert.equal(sessions.ownedTabs(lease).length, pages.length);
+    const result = await sessions.closeSessionPages(b, { port: 9222 });
+    assert.equal(result.closed, pages.length);
+    assert.ok(pages.every(p => p.closed));
   } finally {
     for (const l of allLeases().filter(l => l.id === id)) rmSync(join(homedir(), '.browse-tool','leases',l.file), {force:true});
     if (old === undefined) delete process.env.BROWSE_SESSION; else process.env.BROWSE_SESSION = old;

@@ -283,7 +283,7 @@ if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
 // Not clearLease(), which is keyed by session and mode with no port: a
 // `browse-stop --port 9333` that found nothing would then delete this session's
 // live 9222 lease, orphaning its own tab.
-const cleared = clearLeasesForPort(port, { sessionOnly: !targets.size });
+const cleared = await clearLeasesForPort(port, { sessionOnly: !targets.size });
 if (cleared) {
   console.log(
     `Cleared ${cleared} tab lease(s) for port ${port}${targets.size ? "" : " (this session's only)"}.`,
