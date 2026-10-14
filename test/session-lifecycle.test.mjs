@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { rmSync, mkdirSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { sessionPage, createSessionPage, allLeases } from '../lib/session.js';
@@ -122,6 +122,29 @@ test('concurrent commands retain every owned tab for cleanup', async () => {
     assert.equal(result.closed, pages.length);
     assert.ok(pages.every(p => p.closed));
   } finally {
+    for (const l of allLeases().filter(l => l.id === id)) rmSync(join(homedir(), '.browse-tool','leases',l.file), {force:true});
+    if (old === undefined) delete process.env.BROWSE_SESSION; else process.env.BROWSE_SESSION = old;
+  }
+});
+
+
+test('an abandoned empty lock recovers; a fresh lock fails with a bounded busy message', async () => {
+  const id = `lock-recovery-test-${process.pid}`;
+  const old = process.env.BROWSE_SESSION; process.env.BROWSE_SESSION = id;
+  const dir = join(homedir(), '.browse-tool','leases',id+'.lock');
+  const b = fakeBrowser();
+  try {
+    mkdirSync(dir);
+    const stale = new Date(Date.now() - 60000);
+    utimesSync(dir, stale, stale);
+    await sessionPage(b, { port: 9222, incognito: false });
+    await sessions.closeSessionPages(b, { port: 9222 });
+    mkdirSync(dir);
+    const started = Date.now();
+    await assert.rejects(sessionPage(b, { port: 9222, incognito: false }), /Session tab update is busy/);
+    assert.ok(Date.now() - started < 10000, 'busy lock is reported before the setup watchdog');
+  } finally {
+    rmSync(dir, {recursive:true,force:true});
     for (const l of allLeases().filter(l => l.id === id)) rmSync(join(homedir(), '.browse-tool','leases',l.file), {force:true});
     if (old === undefined) delete process.env.BROWSE_SESSION; else process.env.BROWSE_SESSION = old;
   }
