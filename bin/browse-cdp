@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { connect, activeOrFirstPage, parseArgs } from "../lib/connect.js";
+import { spawn } from "node:child_process";
+import { constants } from "node:os";
+import { connect, activeOrFirstPage, parseArgs, sessionId, setPhase } from "../lib/connect.js";
 
 // Raw CDP passthrough — the escape hatch for anything the task-level commands
 // don't cover, including protocol methods added after this tool was written.
@@ -8,18 +10,48 @@ import { connect, activeOrFirstPage, parseArgs } from "../lib/connect.js";
 // when one fits: they cost fewer tokens per call and handle output sensibly
 // (e.g. Page.captureScreenshot returns base64 in stdout; browse-screenshot
 // writes a file you can Read).
+//
+// Some overrides last only while the CDP session that set them stays attached,
+// and this command's session detaches when it exits. `-- <command>` holds the
+// session open while <command> runs, which is the only way such an override
+// reaches another browse-* command. Measured 2026-10-15 on Chrome 152: a busy
+// loop ran 0.98x after a bare `Emulation.setCPUThrottlingRate {"rate": 4}` and
+// 4.05x while the setting session stayed attached. A bare call to one of these
+// returned {} and exit 0 while changing nothing, so a timing pass "on a slow
+// phone" silently ran at full speed. They are refused without a command.
+// Emulation.setDeviceMetricsOverride, by contrast, persisted after detach, so
+// this is a measured list rather than a domain rule.
+const ENDS_ON_DETACH = new Set(["Emulation.setCPUThrottlingRate", "Network.emulateNetworkConditions"]);
 
-const args = parseArgs(process.argv.slice(2), { browser: "bool" });
+// Split before parsing: parseArgs would read `--` as a flag and swallow the
+// wrapped command's own flags (--port, --wait, --file) as this command's.
+const argv = process.argv.slice(2);
+const sep = argv.indexOf("--");
+const held = sep === -1 ? null : argv.slice(sep + 1);
+const args = parseArgs(sep === -1 ? argv : argv.slice(0, sep), { browser: "bool" });
 const [method, rawParams] = args._;
 
-if (!method || !/^[A-Za-z]+\.[A-Za-z0-9]+$/.test(method)) {
+if (!method || !/^[A-Za-z]+\.[A-Za-z0-9]+$/.test(method) || held?.length === 0) {
   console.error(
-    "Usage: browse-cdp <Domain.method> ['<json-params>'] [--browser] [--port <n>]\n" +
+    "Usage: browse-cdp <Domain.method> ['<json-params>'] [--browser] [--port <n>] [-- <command> [args...]]\n" +
       "Examples:\n" +
       "  browse-cdp Page.navigate '{\"url\": \"https://example.com\"}'\n" +
-      "  browse-cdp Emulation.setCPUThrottlingRate '{\"rate\": 4}'\n" +
+      "  browse-cdp Emulation.setCPUThrottlingRate '{\"rate\": 4}' -- browse-eval '<js to time>'\n" +
       "  browse-cdp Browser.getVersion --browser\n" +
-      "--browser sends to the browser target instead of this session's tab (Target.*, Browser.*, SystemInfo.*).",
+      "--browser sends to the browser target instead of this session's tab (Target.*, Browser.*, SystemInfo.*).\n" +
+      "-- <command> keeps this CDP session attached while <command> runs, then exits with its code.\n" +
+      "CPU throttling and network emulation end when the session that set them detaches, so they need it.",
+  );
+  process.exit(1);
+}
+
+if (!held && ENDS_ON_DETACH.has(method)) {
+  console.error(
+    `${method} lasts only while the CDP session that set it is attached, and browse-cdp\n` +
+      "detaches when it exits, so on its own it would change nothing. Hold it for the command\n" +
+      "you want to run under it:\n" +
+      `  browse-cdp ${method} '${rawParams ?? "{}"}' -- browse-eval '<js>'\n` +
+      "Several commands: -- sh -c 'browse-nav <url> --wait && browse-eval \"<js>\"'",
   );
   process.exit(1);
 }
@@ -34,14 +66,25 @@ if (rawParams !== undefined) {
   }
 }
 
-const browser = await connect(args.port);
+// A held command can run as long as it likes: the override must not drop
+// because this process's own watchdog fired mid-run. The child keeps its own.
+const browser = await connect(args.port, { timeCommand: !held });
 const cdp = args.browser
   ? await browser.target().createCDPSession()
   : await (await activeOrFirstPage(browser)).createCDPSession();
+// activeOrFirstPage ends setup; the --browser path has to say so itself, or the
+// 20s setup watchdog stays armed for the whole command.
+if (args.browser) setPhase("command");
 
 try {
   const result = await cdp.send(method, params);
-  console.log(JSON.stringify(result ?? {}, null, 2));
+  if (!held) {
+    console.log(JSON.stringify(result ?? {}, null, 2));
+  } else {
+    // stdout belongs to the held command; a non-empty result goes to stderr.
+    if (Object.keys(result ?? {}).length) console.error(JSON.stringify(result));
+    process.exitCode = await runHeld(held);
+  }
 } catch (err) {
   // Chrome's own error text names unknown methods and bad params precisely;
   // pass it through rather than paraphrasing.
@@ -50,4 +93,27 @@ try {
 } finally {
   await cdp.detach().catch(() => {});
   browser.disconnect();
+}
+
+// The held command inherits stdio, and its exit code becomes ours. Signals sent
+// to this process are forwarded, and the session detaches only after the child
+// is gone. If this process dies first, its socket closes and Chrome drops the
+// override anyway, so nothing set here can outlive the command.
+//
+// BROWSE_SESSION is pinned for the child. Without a harness id, sessionId()
+// falls back to the parent pid, and the child's parent is this process: it
+// would lease a fresh tab and run outside the override it was meant to run in.
+function runHeld([cmd, ...cmdArgs]) {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, cmdArgs, {
+      stdio: "inherit",
+      env: { ...process.env, BROWSE_SESSION: sessionId() },
+    });
+    for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, () => child.kill(sig));
+    child.on("error", (err) => {
+      console.error(`browse-cdp: could not run '${cmd}': ${err.message}`);
+      resolve(127);
+    });
+    child.on("exit", (code, signal) => resolve(code ?? 128 + (constants.signals[signal] ?? 0)));
+  });
 }

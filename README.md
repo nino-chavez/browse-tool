@@ -325,15 +325,28 @@ wait; grep loadingFailed /tmp/net.jsonl
 
 ### browse-cdp
 
-    browse-cdp <Domain.method> ['<json-params>'] [--browser]
+    browse-cdp <Domain.method> ['<json-params>'] [--browser] [-- <command> [args...]]
 
-Raw CDP passthrough: send any protocol method to this session's tab and print the JSON result. The escape hatch for anything the task-level commands don't cover — including methods Chrome shipped after this tool was written. `--browser` targets the browser instead of the tab (for `Target.*`, `Browser.*`, `SystemInfo.*`).
+Raw CDP passthrough: send any protocol method to this session's tab and print the JSON result. The escape hatch for anything the task-level commands don't cover — including methods Chrome shipped after this tool was written.
+
+- **`--browser`** targets the browser instead of the tab (for `Target.*`, `Browser.*`, `SystemInfo.*`).
+- **`-- <command>`** keeps this CDP session attached while `<command>` runs, then exits with its exit code. The wrapped command drives the same tab and owns stdout; a non-empty CDP result goes to stderr.
+- **CPU throttling and network emulation need `-- <command>`.** Chrome drops both when the CDP session that set them detaches, and `browse-cdp` detaches when it exits. So `Emulation.setCPUThrottlingRate` and `Network.emulateNetworkConditions` are refused without a command to hold for.
+- **Other overrides vary.** `Emulation.setDeviceMetricsOverride` persisted after `browse-cdp` exited. Before trusting any other override, check its effect from a separate command.
+- **Nothing held outlives the command.** If `browse-cdp` dies, its socket closes and Chrome drops the override.
 
 ```bash
-browse-cdp Emulation.setCPUThrottlingRate '{"rate": 4}'
-browse-cdp Network.emulateNetworkConditions '{"offline": false, "latency": 200, "downloadThroughput": 100000, "uploadThroughput": 50000}'
+browse-cdp Emulation.setCPUThrottlingRate '{"rate": 4}' -- browse-eval '<js to time>'
+browse-cdp Network.emulateNetworkConditions '{"offline": false, "latency": 200, "downloadThroughput": 100000, "uploadThroughput": 50000}' \
+  -- sh -c 'browse-nav https://example.com --wait && browse-screenshot'
+browse-cdp Emulation.setCPUThrottlingRate '{"rate": 4}' \
+  -- browse-cdp Network.emulateNetworkConditions '<json>' -- browse-eval '<js>'
 browse-cdp Browser.getVersion --browser
 ```
+
+The third line nests two holds to combine overrides. A held throttle survives navigation, including to another site.
+
+Why the hold exists: until 2026-10-15 the README showed the bare throttle call. It printed `{}` and exited 0, but the next command ran at full speed. On Chrome 152, a busy loop timed 0.98x after the bare call at rate 4, and 4.05x under a held one. `npm test` checks both overrides, the CPU one with a busy-loop ratio, against a headless Chrome for Testing. It skips when none is installed.
 
 Prefer the task commands when one fits — `browse-eval` over `Runtime.evaluate`, `browse-screenshot` over `Page.captureScreenshot` (which dumps base64 to stdout). They cost fewer tokens per call and handle output sensibly.
 
