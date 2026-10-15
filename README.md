@@ -330,7 +330,7 @@ wait; grep loadingFailed /tmp/net.jsonl
 Raw CDP passthrough: send any protocol method to this session's tab and print the JSON result. The escape hatch for anything the task-level commands don't cover — including methods Chrome shipped after this tool was written.
 
 - **`--browser`** targets the browser instead of the tab (for `Target.*`, `Browser.*`, `SystemInfo.*`).
-- **`-- <command>`** keeps this CDP session attached while `<command>` runs, then exits with its exit code. The wrapped command drives the same tab and owns stdout; a non-empty CDP result goes to stderr.
+- **`-- <command>`** keeps this CDP session attached while `<command>` runs, then exits with its exit code. The wrapped command drives the same browser and tab, `--port` included, and owns stdout; a non-empty CDP result goes to stderr.
 - **CPU throttling and network emulation need `-- <command>`.** Chrome drops both when the CDP session that set them detaches, and `browse-cdp` detaches when it exits. So `Emulation.setCPUThrottlingRate` and `Network.emulateNetworkConditions` are refused without a command to hold for.
 - **Other overrides vary.** `Emulation.setDeviceMetricsOverride` persisted after `browse-cdp` exited. Before trusting any other override, check its effect from a separate command.
 - **Nothing held outlives the command.** If `browse-cdp` dies, its socket closes and Chrome drops the override.

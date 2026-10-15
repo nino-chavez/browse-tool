@@ -48,9 +48,9 @@ const LOOP =
 let chrome, profile, home, env, server, origin;
 
 /** Run a command to completion: stdin closed, bounded, output captured. */
-function run(cmd, args, timeout = 60000) {
+function run(cmd, args, { timeout = 60000, envOverride = {} } = {}) {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { env, stdio: ["ignore", "pipe", "pipe"], timeout });
+    const child = spawn(cmd, args, { env: { ...env, ...envOverride }, stdio: ["ignore", "pipe", "pipe"], timeout });
     let stdout = "", stderr = "";
     child.stdout.on("data", (d) => (stdout += d));
     child.stderr.on("data", (d) => (stderr += d));
@@ -109,6 +109,18 @@ test("a held CPU throttle slows the wrapped command, then ends with it", { skip:
   assert.ok(ratio >= 2, `rate 4 should slow the loop at least 2x: ${base.toFixed(1)} -> ${held.toFixed(1)} ms (${ratio.toFixed(2)}x)`);
   // The other direction: the throttle must not outlive the command that held it.
   assert.ok(afterwards / base < 1.5, `throttle leaked past the hold: ${base.toFixed(1)} -> ${afterwards.toFixed(1)} ms`);
+});
+
+test("--port reaches the wrapped command", { skip: SKIP, timeout: 90000 }, async () => {
+  // BROWSE_PORT names a port nothing listens on, so a child that lost --port
+  // fails to connect instead of reaching some other browser, such as the shared one.
+  const base = ms(await bin("browse-eval", LOOP), "baseline browse-eval");
+  const held = ms(
+    await run(join(BIN, "browse-cdp"), ["--port", env.BROWSE_PORT, "Emulation.setCPUThrottlingRate", '{"rate": 4}',
+      "--", join(BIN, "browse-eval"), LOOP], { envOverride: { BROWSE_PORT: "1" } }),
+    "browse-eval held under browse-cdp --port",
+  );
+  assert.ok(held / base >= 2, `rate 4 via --port should slow the loop at least 2x: ${base.toFixed(1)} -> ${held.toFixed(1)} ms`);
 });
 
 test("a held network emulation applies to the wrapped command", { skip: SKIP, timeout: 60000 }, async () => {

@@ -100,14 +100,16 @@ try {
 // is gone. If this process dies first, its socket closes and Chrome drops the
 // override anyway, so nothing set here can outlive the command.
 //
-// BROWSE_SESSION is pinned for the child. Without a harness id, sessionId()
-// falls back to the parent pid, and the child's parent is this process: it
-// would lease a fresh tab and run outside the override it was meant to run in.
+// The child's session and port are pinned to this command's, so it drives the
+// tab holding the override. Without a harness id, sessionId() falls back to the
+// parent pid, and the child's parent is this process: it would lease a fresh
+// tab. And `--port` is this process's flag only: without BROWSE_PORT the child
+// would drive 9222 while the override sat on another browser.
 function runHeld([cmd, ...cmdArgs]) {
   return new Promise((resolve) => {
     const child = spawn(cmd, cmdArgs, {
       stdio: "inherit",
-      env: { ...process.env, BROWSE_SESSION: sessionId() },
+      env: { ...process.env, BROWSE_SESSION: sessionId(), BROWSE_PORT: String(browser.__browsePort) },
     });
     for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, () => child.kill(sig));
     child.on("error", (err) => {
