@@ -1,0 +1,258 @@
+{
+  "schema": 1,
+  "source": "results.json and preserved Markdown outputs; no extraction rerun",
+  "fixture_hashes_match": true,
+  "answer_hashes_match": true,
+  "cases": [
+    {
+      "id": "article-navigation",
+      "expected_absent": false,
+      "a": {
+        "required_found": [
+          "Signals beat guesses",
+          "A small check before a big change",
+          "[Read the checklist](https://fixture.test/checklist)"
+        ],
+        "required_missing": [],
+        "excluded_found": [],
+        "selected": true,
+        "pass": true
+      },
+      "b": {
+        "required_found": [
+          "Signals beat guesses",
+          "A small check before a big change"
+        ],
+        "required_missing": [
+          "[Read the checklist](https://fixture.test/checklist)"
+        ],
+        "excluded_found": [
+          "Site navigation",
+          "Buy a course",
+          "Footer legal"
+        ],
+        "selected": true,
+        "pass": false
+      },
+      "c": {
+        "required_found": [],
+        "required_missing": [
+          "Signals beat guesses",
+          "A small check before a big change",
+          "[Read the checklist](https://fixture.test/checklist)"
+        ],
+        "excluded_found": [],
+        "selected": false,
+        "pass": false
+      }
+    },
+    {
+      "id": "documentation-code",
+      "expected_absent": false,
+      "a": {
+        "required_found": [
+          "Install the command",
+          "npm run verify",
+          "const port = 9222;"
+        ],
+        "required_missing": [],
+        "excluded_found": [],
+        "selected": true,
+        "pass": true
+      },
+      "b": {
+        "required_found": [
+          "Install the command",
+          "npm run verify",
+          "const port = 9222;"
+        ],
+        "required_missing": [],
+        "excluded_found": [
+          "Edit this page"
+        ],
+        "selected": true,
+        "pass": false
+      },
+      "c": {
+        "required_found": [],
+        "required_missing": [
+          "Install the command",
+          "npm run verify",
+          "const port = 9222;"
+        ],
+        "excluded_found": [],
+        "selected": false,
+        "pass": false
+      }
+    },
+    {
+      "id": "table-rich",
+      "expected_absent": false,
+      "a": {
+        "required_found": [
+          "Coverage report",
+          "North",
+          "18",
+          "South",
+          "21"
+        ],
+        "required_missing": [],
+        "excluded_found": [
+          "Download CSV",
+          "Report navigation"
+        ],
+        "selected": true,
+        "pass": false
+      },
+      "b": {
+        "required_found": [
+          "Coverage report",
+          "North",
+          "18",
+          "South",
+          "21"
+        ],
+        "required_missing": [],
+        "excluded_found": [
+          "Download CSV"
+        ],
+        "selected": true,
+        "pass": false
+      },
+      "c": {
+        "required_found": [],
+        "required_missing": [
+          "Coverage report",
+          "North",
+          "18",
+          "South",
+          "21"
+        ],
+        "excluded_found": [],
+        "selected": false,
+        "pass": false
+      }
+    },
+    {
+      "id": "listing-records",
+      "expected_absent": false,
+      "a": {
+        "required_found": [
+          "Program coordinator"
+        ],
+        "required_missing": [
+          "Austin",
+          "Full time"
+        ],
+        "excluded_found": [
+          "Program coordinator intern"
+        ],
+        "selected": true,
+        "pass": false
+      },
+      "b": {
+        "required_found": [
+          "Program coordinator",
+          "Austin",
+          "Full time"
+        ],
+        "required_missing": [],
+        "excluded_found": [
+          "Hiring now",
+          "Program coordinator intern",
+          "Site navigation"
+        ],
+        "selected": true,
+        "pass": false
+      },
+      "c": {
+        "required_found": [],
+        "required_missing": [
+          "Program coordinator",
+          "Austin",
+          "Full time"
+        ],
+        "excluded_found": [],
+        "selected": false,
+        "pass": false
+      }
+    },
+    {
+      "id": "nested-layout",
+      "expected_absent": false,
+      "a": {
+        "required_found": [
+          "Nested layouts need a stable content boundary",
+          "Keep the decision with its evidence"
+        ],
+        "required_missing": [],
+        "excluded_found": [],
+        "selected": true,
+        "pass": true
+      },
+      "b": {
+        "required_found": [
+          "Nested layouts need a stable content boundary",
+          "Keep the decision with its evidence"
+        ],
+        "required_missing": [],
+        "excluded_found": [
+          "Pinned note",
+          "Sidebar note"
+        ],
+        "selected": true,
+        "pass": false
+      },
+      "c": {
+        "required_found": [],
+        "required_missing": [
+          "Nested layouts need a stable content boundary",
+          "Keep the decision with its evidence"
+        ],
+        "excluded_found": [],
+        "selected": false,
+        "pass": false
+      }
+    },
+    {
+      "id": "removed-target",
+      "expected_absent": true,
+      "a": {
+        "required_found": [],
+        "required_missing": [],
+        "excluded_found": [
+          "Starter plan",
+          "Growth plan"
+        ],
+        "selected": true,
+        "pass": null
+      },
+      "b": {
+        "required_found": [],
+        "required_missing": [],
+        "excluded_found": [
+          "Starter plan",
+          "Growth plan"
+        ],
+        "selected": true,
+        "pass": null
+      },
+      "c": {
+        "required_found": [],
+        "required_missing": [],
+        "excluded_found": [
+          "Starter plan"
+        ],
+        "selected": true,
+        "pass": false
+      }
+    }
+  ],
+  "scorer_controls": {
+    "retained_clean_output_passes": true,
+    "removed_required_text_fails": true,
+    "injected_noise_fails": true,
+    "selected_decoy_fails_absence": true,
+    "empty_selection_passes_absence": true
+  }
+}
