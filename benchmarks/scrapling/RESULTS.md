@@ -22,7 +22,7 @@ The unit of comparison is an exact expected-string check, not a human semantic-q
 | Repeated records | Austin and Full time missing; intern decoy retained | Target fields retained; 3 noise tokens | No relocation |
 | Nested layout | Pass | Text retained; 2 noise tokens | No relocation |
 
-On these five cases, A passed **3/5** strict checks, retained **14/16** required tokens, and retained **3** excluded-noise tokens. B passed **0/5**, retained **15/16**, and retained **10** noise tokens. These numbers come from the preserved outputs, independently rescored in `results.review.json`.
+On these five cases, A passed **3/5** strict checks, retained **14/16** required tokens, and retained **3** excluded-noise tokens. B passed **0/5**, retained **15/16**, and retained **10** noise tokens. These numbers come from the preserved outputs, rescored from preserved outputs in `results.review.json`.
 
 The sixth fixture tests a different job: detecting that a previously selected target no longer exists. A and B are whole-page converters, so their nonempty outputs are **not failures of absence detection**. Only C is judged on that control. It falsely relocated to **Starter plan** after Retired plan was removed. That is a concrete wrong-record result at the tested threshold.
 
