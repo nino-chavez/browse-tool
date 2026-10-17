@@ -1,0 +1,332 @@
+{
+  "schema": 1,
+  "frozen_configuration": {
+    "baseline": "htmlToMarkdown(html, url) with raw=false",
+    "scrapling_generic": "Response.markdown(main_content_only=true); parser-only import; markdownify base dependency",
+    "adaptive": "Selector(adaptive=true, SQLite state) learns the listed CSS selector from BEFORE with auto_save=true; AFTER invokes that same now-missing selector with adaptive=true, auto_save=false, percentage=70. Selected subtree is converted by the incumbent Turndown path to isolate selection from Markdown formatting."
+  },
+  "fixture_hashes": {
+    "fixtures/article-navigation.before.html": "65506704f54afe0ccfd1fa1b540bf204a2c6fd9335c0f4cae35e63e8b902d5a8",
+    "fixtures/article-navigation.after.html": "fffd9cde63ea245287837a7eac85a9225ebebd76e0e1d2b4bdac03f0cc7ad077",
+    "fixtures/documentation-code.before.html": "e736eb4802b1ee80e3f817e236bc3c62912d458b5fca8f7504f752a997a75da9",
+    "fixtures/documentation-code.after.html": "50caa8d8405187e40c891c19a4c88101e2f6180f3e9813d3702fcaa090c3f904",
+    "fixtures/table-rich.before.html": "3068a76a02695cc7322d1aef7090ab49704e42b60b19392fe9d2da54a99779db",
+    "fixtures/table-rich.after.html": "b0e4fd589d61b460efca8a5867aae51e489a612ce4330a8d7577c592e43e6eb9",
+    "fixtures/listing-records.before.html": "3c74713e534834bf94259320029ca8359b553c5ac91bb001a82a8cb3c82279ec",
+    "fixtures/listing-records.after.html": "f06570f030b8b292cea3d0af3e145e858be9f4245560b848dd72eeb8c4058c25",
+    "fixtures/nested-layout.before.html": "842bcd6629ffdbc7586b546da9ff86b565728181577d2ee71ae70d0690ca97ba",
+    "fixtures/nested-layout.after.html": "e5b62e8933dac7d28d60b2d9e461be478910f2769905025ccf67208ebeb888ed",
+    "fixtures/removed-target.before.html": "fea289e367e3e0bf894c1f3411cfe2ee942ce8a88c48a32f40cc0a2d9ae0c50d",
+    "fixtures/removed-target.after.html": "98ca711b63fe14317e046c09a1625b22619a1b616a28bc4abf53d7d9e3c08cf3"
+  },
+  "answer_hashes": {
+    "article-navigation": "374b10d5a39bbfecee7da53b4efdd6b856bf61130a3688f7dc280fd22ae3743b",
+    "documentation-code": "b164e737c469b1be9c61bf378458cb2fd59215330e939534e447892156f00c67",
+    "table-rich": "c3e2041a18d8cac8a2292f13bcd9c41b3dc81d2d25f5083e86eab4eed23a49a7",
+    "listing-records": "3cfef786cc52d094bfb45c6838fdbf33036d9bdda27edb67c56d08d68451c95e",
+    "nested-layout": "82d4c7bfff53b5a4c7c8f4fa3045ebe3ad37a23434ad4083405b3fde905b706f",
+    "removed-target": "112562e72bec30c963292127b74c4f496924f47866b158607902498467dd82ea"
+  },
+  "arms": {
+    "A": "actual browse-tool htmlToMarkdown default (Readability plus Turndown)",
+    "B": "Scrapling Response.markdown(main_content_only=true), parser-only",
+    "C": "Scrapling adaptive selection learned on BEFORE; selected subtree formatted by incumbent Turndown"
+  },
+  "cases": [
+    {
+      "id": "article-navigation",
+      "expected_absent": false,
+      "a": {
+        "required_found": [
+          "Signals beat guesses",
+          "A small check before a big change",
+          "[Read the checklist](https://fixture.test/checklist)"
+        ],
+        "required_missing": [],
+        "excluded_found": [],
+        "selected": true,
+        "parse_ns": 712201042,
+        "startup_ns": 0,
+        "pass": true
+      },
+      "b": {
+        "required_found": [
+          "Signals beat guesses",
+          "A small check before a big change"
+        ],
+        "required_missing": [
+          "[Read the checklist](https://fixture.test/checklist)"
+        ],
+        "excluded_found": [
+          "Site navigation",
+          "Buy a course",
+          "Footer legal"
+        ],
+        "selected": true,
+        "parse_ns": 38843750,
+        "startup_ns": 279624625,
+        "pass": false
+      },
+      "c": {
+        "required_found": [],
+        "required_missing": [
+          "Signals beat guesses",
+          "A small check before a big change",
+          "[Read the checklist](https://fixture.test/checklist)"
+        ],
+        "excluded_found": [],
+        "selected": false,
+        "parse_ns": 33951875,
+        "startup_ns": 178892458,
+        "learn_parse_ns": 34625083,
+        "learn_startup_ns": 150632208,
+        "pass": false
+      }
+    },
+    {
+      "id": "documentation-code",
+      "expected_absent": false,
+      "a": {
+        "required_found": [
+          "Install the command",
+          "npm run verify",
+          "const port = 9222;"
+        ],
+        "required_missing": [],
+        "excluded_found": [],
+        "selected": true,
+        "parse_ns": 1076910458,
+        "startup_ns": 0,
+        "pass": true
+      },
+      "b": {
+        "required_found": [
+          "Install the command",
+          "npm run verify",
+          "const port = 9222;"
+        ],
+        "required_missing": [],
+        "excluded_found": [
+          "Edit this page"
+        ],
+        "selected": true,
+        "parse_ns": 91771958,
+        "startup_ns": 421191667,
+        "pass": false
+      },
+      "c": {
+        "required_found": [],
+        "required_missing": [
+          "Install the command",
+          "npm run verify",
+          "const port = 9222;"
+        ],
+        "excluded_found": [],
+        "selected": false,
+        "parse_ns": 39887292,
+        "startup_ns": 307225833,
+        "learn_parse_ns": 48543917,
+        "learn_startup_ns": 324710792,
+        "pass": false
+      }
+    },
+    {
+      "id": "table-rich",
+      "expected_absent": false,
+      "a": {
+        "required_found": [
+          "Coverage report",
+          "North",
+          "18",
+          "South",
+          "21"
+        ],
+        "required_missing": [],
+        "excluded_found": [
+          "Download CSV",
+          "Report navigation"
+        ],
+        "selected": true,
+        "parse_ns": 753578916,
+        "startup_ns": 0,
+        "pass": false
+      },
+      "b": {
+        "required_found": [
+          "Coverage report",
+          "North",
+          "18",
+          "South",
+          "21"
+        ],
+        "required_missing": [],
+        "excluded_found": [
+          "Download CSV"
+        ],
+        "selected": true,
+        "parse_ns": 50970792,
+        "startup_ns": 241230125,
+        "pass": false
+      },
+      "c": {
+        "required_found": [],
+        "required_missing": [
+          "Coverage report",
+          "North",
+          "18",
+          "South",
+          "21"
+        ],
+        "excluded_found": [],
+        "selected": false,
+        "parse_ns": 45525875,
+        "startup_ns": 225980416,
+        "learn_parse_ns": 40535042,
+        "learn_startup_ns": 243423083,
+        "pass": false
+      }
+    },
+    {
+      "id": "listing-records",
+      "expected_absent": false,
+      "a": {
+        "required_found": [
+          "Program coordinator"
+        ],
+        "required_missing": [
+          "Austin",
+          "Full time"
+        ],
+        "excluded_found": [
+          "Program coordinator intern"
+        ],
+        "selected": true,
+        "parse_ns": 697051667,
+        "startup_ns": 0,
+        "pass": false
+      },
+      "b": {
+        "required_found": [
+          "Program coordinator",
+          "Austin",
+          "Full time"
+        ],
+        "required_missing": [],
+        "excluded_found": [
+          "Hiring now",
+          "Program coordinator intern",
+          "Site navigation"
+        ],
+        "selected": true,
+        "parse_ns": 51419500,
+        "startup_ns": 265570875,
+        "pass": false
+      },
+      "c": {
+        "required_found": [],
+        "required_missing": [
+          "Program coordinator",
+          "Austin",
+          "Full time"
+        ],
+        "excluded_found": [],
+        "selected": false,
+        "parse_ns": 33608000,
+        "startup_ns": 195226500,
+        "learn_parse_ns": 52863750,
+        "learn_startup_ns": 217184125,
+        "pass": false
+      }
+    },
+    {
+      "id": "nested-layout",
+      "expected_absent": false,
+      "a": {
+        "required_found": [
+          "Nested layouts need a stable content boundary",
+          "Keep the decision with its evidence"
+        ],
+        "required_missing": [],
+        "excluded_found": [],
+        "selected": true,
+        "parse_ns": 496792750,
+        "startup_ns": 0,
+        "pass": true
+      },
+      "b": {
+        "required_found": [
+          "Nested layouts need a stable content boundary",
+          "Keep the decision with its evidence"
+        ],
+        "required_missing": [],
+        "excluded_found": [
+          "Pinned note",
+          "Sidebar note"
+        ],
+        "selected": true,
+        "parse_ns": 35537291,
+        "startup_ns": 174975917,
+        "pass": false
+      },
+      "c": {
+        "required_found": [],
+        "required_missing": [
+          "Nested layouts need a stable content boundary",
+          "Keep the decision with its evidence"
+        ],
+        "excluded_found": [],
+        "selected": false,
+        "parse_ns": 29964917,
+        "startup_ns": 155872709,
+        "learn_parse_ns": 27514041,
+        "learn_startup_ns": 147706458,
+        "pass": false
+      }
+    },
+    {
+      "id": "removed-target",
+      "expected_absent": true,
+      "a": {
+        "required_found": [],
+        "required_missing": [],
+        "excluded_found": [
+          "Starter plan",
+          "Growth plan"
+        ],
+        "selected": true,
+        "parse_ns": 565435375,
+        "startup_ns": 0,
+        "pass": false
+      },
+      "b": {
+        "required_found": [],
+        "required_missing": [],
+        "excluded_found": [
+          "Starter plan",
+          "Growth plan"
+        ],
+        "selected": true,
+        "parse_ns": 33584125,
+        "startup_ns": 165033167,
+        "pass": false
+      },
+      "c": {
+        "required_found": [],
+        "required_missing": [],
+        "excluded_found": [
+          "Starter plan"
+        ],
+        "selected": true,
+        "parse_ns": 34297417,
+        "startup_ns": 197945792,
+        "learn_parse_ns": 37263375,
+        "learn_startup_ns": 184785750,
+        "pass": false
+      }
+    }
+  ],
+  "harness_negative_control": {
+    "case": "article-navigation",
+    "deliberately_corrupted_output_rejected": true
+  }
+}

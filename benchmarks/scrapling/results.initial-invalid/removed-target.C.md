@@ -1,0 +1,3 @@
+## Starter plan
+
+Current support
