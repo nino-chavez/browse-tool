@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "purpose": "Offline synthetic comparison of browse-tool's Readability plus Turndown extraction with Scrapling parser-only Markdown and optional adaptive selection.",
+  "provenance": "All fixtures are synthetic, authored for this benchmark on 2026-10-16. They contain no copied private or third-party prose.",
+  "frozen_configuration": {
+    "baseline": "htmlToMarkdown(html, url) with raw=false",
+    "scrapling_generic": "Response.markdown(main_content_only=true); parser-only import; markdownify base dependency",
+    "adaptive": "Selector(adaptive=true, SQLite state) learns the listed CSS selector from BEFORE with auto_save=true; AFTER invokes that same now-missing selector with adaptive=true, auto_save=false, percentage=70. Selected subtree is converted by the incumbent Turndown path to isolate selection from Markdown formatting."
+  },
+  "cases": [
+    {"id":"article-navigation","kind":"long article with navigation","before":"fixtures/article-navigation.before.html","after":"fixtures/article-navigation.after.html","url":"https://fixture.test/articles/signal","selector":"#article-copy","required":["Signals beat guesses","A small check before a big change","[Read the checklist](https://fixture.test/checklist)"],"excluded":["Site navigation","Buy a course","Footer legal"],"notes":"After moves the article below a wrapper and adds a related-story decoy."},
+    {"id":"documentation-code","kind":"documentation with code","before":"fixtures/documentation-code.before.html","after":"fixtures/documentation-code.after.html","url":"https://fixture.test/docs/install","selector":"#guide-main","required":["Install the command","npm run verify","const port = 9222;"],"excluded":["Docs navigation","Edit this page"],"notes":"After changes the main element and code-wrapper class, preserving code content."},
+    {"id":"table-rich","kind":"table-rich report","before":"fixtures/table-rich.before.html","after":"fixtures/table-rich.after.html","url":"https://fixture.test/reports/coverage","selector":"#report-body","required":["Coverage report","North","18","South","21"],"excluded":["Download CSV","Report navigation"],"notes":"After wraps the report in a grid and adds a sidebar table decoy."},
+    {"id":"listing-records","kind":"repeated listing records","before":"fixtures/listing-records.before.html","after":"fixtures/listing-records.after.html","url":"https://fixture.test/jobs","selector":"#record-amber","required":["Program coordinator","Austin","Full time"],"excluded":["Hiring now","Program coordinator intern","Site navigation"],"notes":"Adaptive target is one record, not the full listing; AFTER changes its id and nests it, while retaining an intentionally similar intern decoy."},
+    {"id":"nested-layout","kind":"nested layout drift","before":"fixtures/nested-layout.before.html","after":"fixtures/nested-layout.after.html","url":"https://fixture.test/notes/drift","selector":"#note-target","required":["Nested layouts need a stable content boundary","Keep the decision with its evidence"],"excluded":["Pinned note","Sidebar note"],"notes":"After moves the target from an aside-adjacent column into a dialog-like section and leaves two non-target notes."},
+    {"id":"removed-target","kind":"near-duplicate decoy and removed target","before":"fixtures/removed-target.before.html","after":"fixtures/removed-target.after.html","url":"https://fixture.test/catalog/retired","selector":"#target-retired","required":[],"excluded":["Retired plan","Starter plan","Growth plan"],"expected_absent":true,"notes":"AFTER removes the learned target entirely and retains two structurally similar non-target plan cards. Any selected content is a false relocation."}
+  ]
+}

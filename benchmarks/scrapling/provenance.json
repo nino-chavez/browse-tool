@@ -1,0 +1,66 @@
+{
+  "version": "0.4.15",
+  "python": "3.12.11",
+  "candidate_modules": [
+    {
+      "module": "scrapling/parser.py",
+      "installed_sha256": "5328500a70a922c07a2ce1a97217ffe2d01d6b6fc336462123ca1fb93758360b",
+      "inspected_sha256": "5328500a70a922c07a2ce1a97217ffe2d01d6b6fc336462123ca1fb93758360b",
+      "identical": true
+    },
+    {
+      "module": "scrapling/engines/toolbelt/custom.py",
+      "installed_sha256": "dff32ca463700e8f79d974ee4a164366c912a5efe883174dc184520b7f70d8f1",
+      "inspected_sha256": "dff32ca463700e8f79d974ee4a164366c912a5efe883174dc184520b7f70d8f1",
+      "identical": true
+    }
+  ],
+  "installed_packages": [
+    {
+      "name": "beautifulsoup4",
+      "version": "4.15.0"
+    },
+    {
+      "name": "cssselect",
+      "version": "1.6.0"
+    },
+    {
+      "name": "lxml",
+      "version": "6.1.3"
+    },
+    {
+      "name": "markdownify",
+      "version": "1.2.3"
+    },
+    {
+      "name": "orjson",
+      "version": "3.13.0"
+    },
+    {
+      "name": "scrapling",
+      "version": "0.4.15"
+    },
+    {
+      "name": "six",
+      "version": "1.17.0"
+    },
+    {
+      "name": "soupsieve",
+      "version": "3.0.3"
+    },
+    {
+      "name": "tld",
+      "version": "0.13.2"
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0"
+    },
+    {
+      "name": "w3lib",
+      "version": "2.5.0"
+    }
+  ],
+  "installed_from": "Local clone of github.com/D4Vinci/Scrapling at 7a684934907a8c7feaafe9ff1ccfd9d45cc26faf",
+  "verification": "Installed parser.py and engines/toolbelt/custom.py match the inspected checkout byte for byte. This does not attest every installed file."
+}
