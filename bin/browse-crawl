@@ -61,7 +61,7 @@ try {
     if (visited.has(normalized.href)) continue;
     visited.add(normalized.href);
 
-    let html, finalUrl;
+    let html, finalUrl, capturedAt;
     try {
       await page.goto(normalized.href, {
         waitUntil: args.wait ? "networkidle2" : "domcontentloaded",
@@ -77,16 +77,23 @@ try {
         visited.add(finalUrl);
       }
       html = await page.content();
+      capturedAt = new Date().toISOString();
     } catch (err) {
       console.error(`skip ${normalized.href}: ${err.message}`);
       continue;
     }
 
-    const { title, markdown } = htmlToMarkdown(html, finalUrl);
+    const { title, markdown, extraction_method } = htmlToMarkdown(html, finalUrl);
     const slug = slugFor(finalUrl, slugs);
     const outPath = join(outDir, `${slug}.md`);
     writeFileSync(outPath, `# ${title || finalUrl}\n\nsource: ${finalUrl}\n\n${markdown}\n`);
-    manifest.push({ url: finalUrl, title: title || null, file: outPath });
+    manifest.push({
+      url: finalUrl,
+      title: title || null,
+      file: outPath,
+      captured_at: capturedAt,
+      extraction_method,
+    });
     console.log(outPath);
 
     if (pageDepth < depth) {
