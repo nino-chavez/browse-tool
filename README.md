@@ -302,7 +302,10 @@ BFS crawl from `start-url`, writing each visited page as clean markdown (Readabi
 
 - Follows same-origin links; `--include prefix` narrows which links are followed.
 - `--depth` (default `1`): the start page plus its direct links. `--max` (default `20`) caps total pages.
-- `--out dir` (default a fresh temp dir) receives one markdown file per page, plus a `manifest.json` listing `{url, title, file}` for every page.
+- `--out dir` (default a fresh temp dir) receives one markdown file per page, plus a `manifest.json`.
+- Each manifest entry contains `url` (the final URL), `title`, `file`, `captured_at`, and `extraction_method`.
+- `captured_at` is a UTC ISO 8601 timestamp recorded immediately after the browser returns the page HTML, before text extraction.
+- `extraction_method` is `readability` when article extraction succeeds, or `body_fallback` when it uses the page body instead. Neither value measures completeness.
 - Prints each file path to stdout as it's written; the final page count and output dir go to stderr.
 - Visited URLs are deduped (fragment-stripped) so it never re-fetches a page.
 
