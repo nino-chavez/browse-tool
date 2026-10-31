@@ -179,6 +179,8 @@ test('cleanup keeps Chrome alive when every tab belongs to this session', async 
     await sessions.closeSessionPages(b, { port: 9222 });
     assert.equal(own.closed, true);
     assert.equal((await b.pages()).length, 1);
+    assert.equal(b.directNewPageCalls, 0, 'cleanup must not create a foreground replacement tab');
+    assert.equal(b.createdTargets.at(-1).background, true);
     assert.equal(allLeases().filter(l => l.id === id).length, 0);
   } finally {
     for (const l of allLeases().filter(l => l.id === id)) rmSync(join(homedir(), '.browse-tool','leases',l.file), {force:true});
