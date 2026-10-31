@@ -15,6 +15,7 @@ import { rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { WebSocketServer } from "ws";
+import { isConnectableTarget, timeoutBudgets } from "../lib/connect.js";
 
 const BIN = fileURLToPath(new URL("../bin/", import.meta.url));
 
@@ -78,6 +79,31 @@ function run(bin, args, port, env = {}, killAfterMs = 15000) {
   });
 }
 
+function runPreviousFilter(port, killAfterMs = 3000) {
+  const child = spawn(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      `import puppeteer from "puppeteer-core";
+       await puppeteer.connect({
+         browserURL: "http://127.0.0.1:" + process.env.BROWSE_PORT,
+         targetFilter: (target) => !/^chrome:\\/\\/[^/]+\\.top-chrome\\//.test(target.url()),
+       });`,
+    ],
+    { env: { ...process.env, BROWSE_PORT: String(port) }, stdio: "ignore" },
+  );
+  return new Promise((resolve) => {
+    const kill = setTimeout(() => child.kill("SIGKILL"), killAfterMs);
+    child.on("exit", (code, signal) => {
+      clearTimeout(kill);
+      resolve({ code, signal });
+    });
+  });
+}
+
+const target = (type, url) => ({ type: () => type, url: () => url });
+
 test("a tabless sign-in bubble no longer blocks connect", async () => {
   const b = await fakeBrowser([
     { targetId: "BUBBLE00000000", type: "page", url: "chrome://signin-dice-web-intercept.top-chrome/" },
@@ -92,9 +118,74 @@ test("a tabless sign-in bubble no longer blocks connect", async () => {
   }
 });
 
+test("the previous filter deterministically hangs on glic and RotateCookiesPage", async () => {
+  const b = await fakeBrowser([
+    { targetId: "GLIC000000000000", type: "page", url: "chrome://glic/" },
+    { targetId: "ROTATE000000000", type: "iframe", url: "chrome://signin/RotateCookiesPage" },
+  ]);
+  try {
+    const r = await runPreviousFilter(b.port);
+    assert.equal(r.code, null);
+    assert.equal(r.signal, "SIGKILL", "the prior filter unexpectedly connected");
+  } finally {
+    b.close();
+  }
+});
+
+test("glic, RotateCookiesPage, and webview targets no longer block connect", async () => {
+  const b = await fakeBrowser([
+    { targetId: "GLIC000000000000", type: "page", url: "chrome://glic/" },
+    { targetId: "ROTATE000000000", type: "iframe", url: "chrome://signin/RotateCookiesPage" },
+    { targetId: "WEBVIEW00000000", type: "webview", url: "https://gemini.google.com/glic" },
+  ]);
+  try {
+    const r = await run("browse-tabs", [], b.port, { BROWSE_TIMEOUT: "2" });
+    assert.equal(r.signal, null, `killed by the outer bound: ${r.stderr}`);
+    assert.equal(r.code, 0, r.stderr);
+  } finally {
+    b.close();
+  }
+});
+
+test("target filtering keeps ordinary pages and iframes eligible", () => {
+  assert.equal(isConnectableTarget(target("page", "https://music-connect.localhost:19882/")), true);
+  assert.equal(isConnectableTarget(target("iframe", "https://music-connect.localhost:19882/frame")), true);
+  assert.equal(isConnectableTarget(target("other", "https://music-connect.localhost:19882/frame")), true);
+  assert.equal(isConnectableTarget(target("page", "https://music-connect.localhost:19882/RotateCookiesPage")), true);
+  assert.equal(isConnectableTarget(target("iframe", "https://music-connect.localhost:19882/?next=RotateCookiesPage")), true);
+  assert.equal(isConnectableTarget(target("page", "chrome-extension://fixture/options.html")), true);
+  assert.equal(isConnectableTarget(target("webview", "https://gemini.google.com/glic")), false);
+  assert.equal(isConnectableTarget(target("page", "chrome://glic/")), false);
+  assert.equal(isConnectableTarget(target("iframe", "chrome://signin/RotateCookiesPage")), false);
+  assert.equal(isConnectableTarget(target("iframe", "https://accounts.google.com/RotateCookiesPage?origin=https%3A%2F%2Fgemini.google.com")), false);
+});
+
+test("an extension page does not hold Puppeteer's initial connection wait", async () => {
+  const b = await fakeBrowser([
+    { targetId: "EXTENSIONPAGE00", type: "page", url: "chrome-extension://fixture/options.html" },
+  ]);
+  try {
+    const module = new URL("../lib/connect.js", import.meta.url).href;
+    const child = spawn(process.execPath, ["--input-type=module", "--eval",
+      `import {connect} from ${JSON.stringify(module)}; const browser = await connect(); browser.disconnect();`,
+    ], {env: {...process.env, BROWSE_PORT:String(b.port), BROWSE_TIMEOUT:"2"}, stdio:"ignore"});
+    const result = await new Promise((resolve) => {
+      const kill = setTimeout(() => child.kill("SIGKILL"), 4000);
+      child.on("exit", (code, signal) => { clearTimeout(kill); resolve({code, signal}); });
+    });
+    assert.equal(result.signal, null);
+    assert.equal(result.code, 0);
+  } finally {
+    b.close();
+  }
+});
+
 test("an unattachable page fails loudly with a diagnosis instead of hanging", async () => {
   const b = await fakeBrowser([
     { targetId: "STUCKPAGE0000000", type: "page", url: "https://example.com/never-attaches" },
+    { targetId: "EXTENSIONPAGE00", type: "page", url: "chrome-extension://fixture/options.html" },
+    { targetId: "IGNOREDGLIC0000", type: "page", url: "chrome://glic/" },
+    { targetId: "IGNOREDROTATE00", type: "iframe", url: "https://accounts.google.com/RotateCookiesPage" },
   ]);
   try {
     const started = Date.now();
@@ -103,6 +194,7 @@ test("an unattachable page fails loudly with a diagnosis instead of hanging", as
     assert.equal(r.code, 124);
     assert.match(r.stderr, /timed out after 2s during connect/);
     assert.match(r.stderr, /STUCKPAG.*never-attaches/);
+    assert.doesNotMatch(r.stderr, /EXTENSIO|chrome-extension|IGNORED|glic|RotateCookiesPage/);
     assert.ok(Date.now() - started < 10000);
   } finally {
     b.close();
@@ -118,6 +210,13 @@ test("BROWSE_TIMEOUT rejects a value that is not seconds", async () => {
   } finally {
     b.close();
   }
+});
+
+test("BROWSE_TIMEOUT uses 20s setup and 90s command defaults, or one explicit budget", () => {
+  assert.deepEqual(timeoutBudgets(""), { setup: 20, command: 90 });
+  assert.deepEqual(timeoutBudgets("60"), { setup: 60, command: 60 });
+  assert.deepEqual(timeoutBudgets("0"), { setup: 0, command: 0 });
+  assert.throws(() => timeoutBudgets("soon"), /must be a number of seconds/);
 });
 
 test("a command that opts out of timing still times its tab lookup", async () => {
