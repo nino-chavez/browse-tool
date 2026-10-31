@@ -15,6 +15,7 @@ import { rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { WebSocketServer } from "ws";
+import { isConnectableTarget, timeoutBudgets } from "../lib/connect.js";
 
 const BIN = fileURLToPath(new URL("../bin/", import.meta.url));
 
@@ -78,6 +79,31 @@ function run(bin, args, port, env = {}, killAfterMs = 15000) {
   });
 }
 
+function runPreviousFilter(port, killAfterMs = 3000) {
+  const child = spawn(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      `import puppeteer from "puppeteer-core";
+       await puppeteer.connect({
+         browserURL: "http://127.0.0.1:" + process.env.BROWSE_PORT,
+         targetFilter: (target) => !/^chrome:\\/\\/[^/]+\\.top-chrome\\//.test(target.url()),
+       });`,
+    ],
+    { env: { ...process.env, BROWSE_PORT: String(port) }, stdio: "ignore" },
+  );
+  return new Promise((resolve) => {
+    const kill = setTimeout(() => child.kill("SIGKILL"), killAfterMs);
+    child.on("exit", (code, signal) => {
+      clearTimeout(kill);
+      resolve({ code, signal });
+    });
+  });
+}
+
+const target = (type, url) => ({ type: () => type, url: () => url });
+
 test("a tabless sign-in bubble no longer blocks connect", async () => {
   const b = await fakeBrowser([
     { targetId: "BUBBLE00000000", type: "page", url: "chrome://signin-dice-web-intercept.top-chrome/" },
@@ -90,6 +116,43 @@ test("a tabless sign-in bubble no longer blocks connect", async () => {
   } finally {
     b.close();
   }
+});
+
+test("the previous filter deterministically hangs on glic and RotateCookiesPage", async () => {
+  const b = await fakeBrowser([
+    { targetId: "GLIC000000000000", type: "page", url: "chrome://glic/" },
+    { targetId: "ROTATE000000000", type: "iframe", url: "chrome://signin/RotateCookiesPage" },
+  ]);
+  try {
+    const r = await runPreviousFilter(b.port);
+    assert.equal(r.code, null);
+    assert.equal(r.signal, "SIGKILL", "the prior filter unexpectedly connected");
+  } finally {
+    b.close();
+  }
+});
+
+test("glic, RotateCookiesPage, and webview targets no longer block connect", async () => {
+  const b = await fakeBrowser([
+    { targetId: "GLIC000000000000", type: "page", url: "chrome://glic/" },
+    { targetId: "ROTATE000000000", type: "iframe", url: "chrome://signin/RotateCookiesPage" },
+    { targetId: "WEBVIEW00000000", type: "webview", url: "https://gemini.google.com/glic" },
+  ]);
+  try {
+    const r = await run("browse-tabs", [], b.port, { BROWSE_TIMEOUT: "2" });
+    assert.equal(r.signal, null, `killed by the outer bound: ${r.stderr}`);
+    assert.equal(r.code, 0, r.stderr);
+  } finally {
+    b.close();
+  }
+});
+
+test("target filtering keeps ordinary pages and iframes eligible", () => {
+  assert.equal(isConnectableTarget(target("page", "https://music-connect.localhost:19882/")), true);
+  assert.equal(isConnectableTarget(target("other", "https://music-connect.localhost:19882/frame")), true);
+  assert.equal(isConnectableTarget(target("webview", "https://gemini.google.com/glic")), false);
+  assert.equal(isConnectableTarget(target("page", "chrome://glic/")), false);
+  assert.equal(isConnectableTarget(target("iframe", "chrome://signin/RotateCookiesPage")), false);
 });
 
 test("an unattachable page fails loudly with a diagnosis instead of hanging", async () => {
@@ -118,6 +181,13 @@ test("BROWSE_TIMEOUT rejects a value that is not seconds", async () => {
   } finally {
     b.close();
   }
+});
+
+test("BROWSE_TIMEOUT uses 20s setup and 90s command defaults, or one explicit budget", () => {
+  assert.deepEqual(timeoutBudgets(undefined), { setup: 20, command: 90 });
+  assert.deepEqual(timeoutBudgets("60"), { setup: 60, command: 60 });
+  assert.deepEqual(timeoutBudgets("0"), { setup: 0, command: 0 });
+  assert.throws(() => timeoutBudgets("soon"), /must be a number of seconds/);
 });
 
 test("a command that opts out of timing still times its tab lookup", async () => {
