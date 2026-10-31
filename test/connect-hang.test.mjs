@@ -162,6 +162,8 @@ test("target filtering keeps ordinary pages and iframes eligible", () => {
 test("an unattachable page fails loudly with a diagnosis instead of hanging", async () => {
   const b = await fakeBrowser([
     { targetId: "STUCKPAGE0000000", type: "page", url: "https://example.com/never-attaches" },
+    { targetId: "IGNOREDGLIC0000", type: "page", url: "chrome://glic/" },
+    { targetId: "IGNOREDROTATE00", type: "iframe", url: "https://accounts.google.com/RotateCookiesPage" },
   ]);
   try {
     const started = Date.now();
@@ -170,6 +172,7 @@ test("an unattachable page fails loudly with a diagnosis instead of hanging", as
     assert.equal(r.code, 124);
     assert.match(r.stderr, /timed out after 2s during connect/);
     assert.match(r.stderr, /STUCKPAG.*never-attaches/);
+    assert.doesNotMatch(r.stderr, /IGNORED|glic|RotateCookiesPage/);
     assert.ok(Date.now() - started < 10000);
   } finally {
     b.close();
@@ -188,7 +191,7 @@ test("BROWSE_TIMEOUT rejects a value that is not seconds", async () => {
 });
 
 test("BROWSE_TIMEOUT uses 20s setup and 90s command defaults, or one explicit budget", () => {
-  assert.deepEqual(timeoutBudgets(undefined), { setup: 20, command: 90 });
+  assert.deepEqual(timeoutBudgets(""), { setup: 20, command: 90 });
   assert.deepEqual(timeoutBudgets("60"), { setup: 60, command: 60 });
   assert.deepEqual(timeoutBudgets("0"), { setup: 0, command: 0 });
   assert.throws(() => timeoutBudgets("soon"), /must be a number of seconds/);
