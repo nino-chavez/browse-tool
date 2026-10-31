@@ -153,6 +153,7 @@ test("target filtering keeps ordinary pages and iframes eligible", () => {
   assert.equal(isConnectableTarget(target("other", "https://music-connect.localhost:19882/frame")), true);
   assert.equal(isConnectableTarget(target("page", "https://music-connect.localhost:19882/RotateCookiesPage")), true);
   assert.equal(isConnectableTarget(target("iframe", "https://music-connect.localhost:19882/?next=RotateCookiesPage")), true);
+  assert.equal(isConnectableTarget(target("page", "chrome-extension://fixture/options.html")), true);
   assert.equal(isConnectableTarget(target("webview", "https://gemini.google.com/glic")), false);
   assert.equal(isConnectableTarget(target("page", "chrome://glic/")), false);
   assert.equal(isConnectableTarget(target("iframe", "chrome://signin/RotateCookiesPage")), false);
@@ -162,6 +163,7 @@ test("target filtering keeps ordinary pages and iframes eligible", () => {
 test("an unattachable page fails loudly with a diagnosis instead of hanging", async () => {
   const b = await fakeBrowser([
     { targetId: "STUCKPAGE0000000", type: "page", url: "https://example.com/never-attaches" },
+    { targetId: "EXTENSIONPAGE00", type: "page", url: "chrome-extension://fixture/options.html" },
     { targetId: "IGNOREDGLIC0000", type: "page", url: "chrome://glic/" },
     { targetId: "IGNOREDROTATE00", type: "iframe", url: "https://accounts.google.com/RotateCookiesPage" },
   ]);
@@ -172,6 +174,7 @@ test("an unattachable page fails loudly with a diagnosis instead of hanging", as
     assert.equal(r.code, 124);
     assert.match(r.stderr, /timed out after 2s during connect/);
     assert.match(r.stderr, /STUCKPAG.*never-attaches/);
+    assert.match(r.stderr, /EXTENSIO.*chrome-extension/);
     assert.doesNotMatch(r.stderr, /IGNORED|glic|RotateCookiesPage/);
     assert.ok(Date.now() - started < 10000);
   } finally {
