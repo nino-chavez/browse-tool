@@ -149,10 +149,14 @@ test("glic, RotateCookiesPage, and webview targets no longer block connect", asy
 
 test("target filtering keeps ordinary pages and iframes eligible", () => {
   assert.equal(isConnectableTarget(target("page", "https://music-connect.localhost:19882/")), true);
+  assert.equal(isConnectableTarget(target("iframe", "https://music-connect.localhost:19882/frame")), true);
   assert.equal(isConnectableTarget(target("other", "https://music-connect.localhost:19882/frame")), true);
+  assert.equal(isConnectableTarget(target("page", "https://music-connect.localhost:19882/RotateCookiesPage")), true);
+  assert.equal(isConnectableTarget(target("iframe", "https://music-connect.localhost:19882/?next=RotateCookiesPage")), true);
   assert.equal(isConnectableTarget(target("webview", "https://gemini.google.com/glic")), false);
   assert.equal(isConnectableTarget(target("page", "chrome://glic/")), false);
   assert.equal(isConnectableTarget(target("iframe", "chrome://signin/RotateCookiesPage")), false);
+  assert.equal(isConnectableTarget(target("iframe", "https://accounts.google.com/RotateCookiesPage?origin=https%3A%2F%2Fgemini.google.com")), false);
 });
 
 test("an unattachable page fails loudly with a diagnosis instead of hanging", async () => {
