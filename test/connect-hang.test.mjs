@@ -160,6 +160,26 @@ test("target filtering keeps ordinary pages and iframes eligible", () => {
   assert.equal(isConnectableTarget(target("iframe", "https://accounts.google.com/RotateCookiesPage?origin=https%3A%2F%2Fgemini.google.com")), false);
 });
 
+test("an extension page does not hold Puppeteer's initial connection wait", async () => {
+  const b = await fakeBrowser([
+    { targetId: "EXTENSIONPAGE00", type: "page", url: "chrome-extension://fixture/options.html" },
+  ]);
+  try {
+    const module = new URL("../lib/connect.js", import.meta.url).href;
+    const child = spawn(process.execPath, ["--input-type=module", "--eval",
+      `import {connect} from ${JSON.stringify(module)}; const browser = await connect(); browser.disconnect();`,
+    ], {env: {...process.env, BROWSE_PORT:String(b.port), BROWSE_TIMEOUT:"2"}, stdio:"ignore"});
+    const result = await new Promise((resolve) => {
+      const kill = setTimeout(() => child.kill("SIGKILL"), 4000);
+      child.on("exit", (code, signal) => { clearTimeout(kill); resolve({code, signal}); });
+    });
+    assert.equal(result.signal, null);
+    assert.equal(result.code, 0);
+  } finally {
+    b.close();
+  }
+});
+
 test("an unattachable page fails loudly with a diagnosis instead of hanging", async () => {
   const b = await fakeBrowser([
     { targetId: "STUCKPAGE0000000", type: "page", url: "https://example.com/never-attaches" },
@@ -174,8 +194,7 @@ test("an unattachable page fails loudly with a diagnosis instead of hanging", as
     assert.equal(r.code, 124);
     assert.match(r.stderr, /timed out after 2s during connect/);
     assert.match(r.stderr, /STUCKPAG.*never-attaches/);
-    assert.match(r.stderr, /EXTENSIO.*chrome-extension/);
-    assert.doesNotMatch(r.stderr, /IGNORED|glic|RotateCookiesPage/);
+    assert.doesNotMatch(r.stderr, /EXTENSIO|chrome-extension|IGNORED|glic|RotateCookiesPage/);
     assert.ok(Date.now() - started < 10000);
   } finally {
     b.close();
