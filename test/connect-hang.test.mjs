@@ -19,7 +19,7 @@ import { isConnectableTarget, timeoutBudgets } from "../lib/connect.js";
 
 const BIN = fileURLToPath(new URL("../bin/", import.meta.url));
 
-/** A browser endpoint that answers every command and attaches to nothing. */
+/** A browser endpoint that answers every command and attaches only to its browser target. */
 async function fakeBrowser(targets) {
   const http = createServer((req, res) => {
     const { port } = http.address();
@@ -32,20 +32,33 @@ async function fakeBrowser(targets) {
   const wss = new WebSocketServer({ server: http });
   wss.on("connection", (ws) => {
     ws.on("message", (raw) => {
-      const { id, method } = JSON.parse(raw);
-      const infos = targets.map((t) => ({
+      const { id, method, sessionId, params } = JSON.parse(raw);
+      const infos = [{
+        targetId: "BROWSER000000000", type: "browser", url: "", attached: true,
+      }, ...targets.map((t) => ({
         attached: false,
         canAccessOpener: false,
         browserContextId: "CTX",
         title: "",
         ...t,
-      }));
+      }))];
       let result = {};
       if (method === "Browser.getVersion") {
         result = { protocolVersion: "1.3", product: "Chrome/152.0", revision: "", userAgent: "Fake", jsVersion: "" };
       }
       if (method === "Target.getBrowserContexts") result = { browserContextIds: [] };
       if (method === "Target.getTargets") result = { targetInfos: infos };
+      if (method === "Target.attachToTarget") {
+        result = { sessionId: "BROWSER-SESSION" };
+        ws.send(JSON.stringify({
+          method: "Target.attachedToTarget",
+          params: {
+            sessionId: result.sessionId,
+            targetInfo: infos.find((info) => info.targetId === params.targetId),
+            waitingForDebugger: false,
+          },
+        }));
+      }
       // Acknowledge a new tab that never appears, so tab lookup waits forever.
       if (method === "Target.createTarget") result = { targetId: "NEVERAPPEARS0000" };
       if (method === "Target.setDiscoverTargets") {
@@ -53,7 +66,7 @@ async function fakeBrowser(targets) {
           ws.send(JSON.stringify({ method: "Target.targetCreated", params: { targetInfo } }));
         }
       }
-      ws.send(JSON.stringify({ id, result }));
+      ws.send(JSON.stringify({ id, result, ...(sessionId ? { sessionId } : {}) }));
     });
   });
   await new Promise((r) => http.listen(0, "127.0.0.1", r));
